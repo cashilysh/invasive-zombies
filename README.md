@@ -8,9 +8,12 @@ Even worse, they can break through doors and other configurable blocks to reach 
 
 **You can adjust these settings** to control things like block-breaking, zombie speed, tracking range, and more, making the challenge as tough as you want it.
 
-<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/5wUEYL1R_6I" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 
-# Notes:
+# Download:
+
+[Invasive Zombies on Modrinth](https://modrinth.com/mod/invasive-zombies)
+
+---
 
 - Only tested on 1.20.1
 - Zombies are sometimes breaking random blocks when far-searching
