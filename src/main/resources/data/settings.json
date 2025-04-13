@@ -1,0 +1,7 @@
+{
+  "followRange": 50.0,
+  "movementSpeed": 0.23,
+  "miningSpeed": 1.0,
+  "TargetRange": 15,
+  "BabyZombiesEnabled": false
+}
