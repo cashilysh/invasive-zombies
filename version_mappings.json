@@ -5,7 +5,7 @@
       "loader": "0.16.10",
       "fabricApi": "0.119.9+1.21.5",
       "modMenu": "14.0.0-rc.2",
-      "clothConfig": "18.0.145"XXX
+      "clothConfig": "18.0.145"
     },
     "1.21.4": {
       "yarn": "net.fabricmc:yarn:1.21.4+build.8:v2",
