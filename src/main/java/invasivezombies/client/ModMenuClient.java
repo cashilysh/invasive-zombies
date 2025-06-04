@@ -1,19 +1,15 @@
 package invasivezombies.client;
 
 import invasivezombies.config.ModConfig;
-import invasivezombies.VersionHelper; // Assuming VersionHelper.CustomIdentifier is used by ModConfig.validateBlockId
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
-import net.minecraft.registry.Registries;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -109,7 +105,7 @@ public class ModMenuClient implements ModMenuApi {
                         Set<String> seenInGui = new HashSet<>();
                         for (String entry : value) {
                             if (entry.isEmpty() && value.size() > 1 && value.indexOf(entry) != value.size()-1) {
-                                // return Optional.of(Text.literal("Empty entries before the last are invalid.").formatted(Formatting.RED));
+                                return Optional.of(Text.literal("Empty entries before the last are invalid.").formatted(Formatting.RED));
                             }
                             if (!entry.isEmpty() && !seenInGui.add(entry)) {
                                 return Optional.of(Text.literal("Duplicate entry: " + entry).formatted(Formatting.GOLD));
@@ -204,13 +200,9 @@ public class ModMenuClient implements ModMenuApi {
                                     settings.getDoorSearchDistance(), 6, 24)
                             .setDefaultValue(defaults.getDoorSearchDistance())
                             .setSaveConsumer(value -> {
-                                int adjustedValue = value;
-                                if (value < 6) adjustedValue = 6;
-                                if (value > 24) adjustedValue = 24;
-                                // If steps are desired for door search like far block:
-                                // adjustedValue = (value / 6) * 6;
-                                // if (adjustedValue < 6) adjustedValue = 6;
-                                // if (adjustedValue > 24) adjustedValue = 24;
+                                int adjustedValue = (value / 6) * 6;
+                                if (adjustedValue < 6) adjustedValue = 6;
+                                if (adjustedValue > 24) adjustedValue = 24;
                                 settings.setDoorSearchDistance(adjustedValue);
                             })
                             .setTooltip(Text.literal("Square search distance for breakable doors around the zombie. NO blocks behind are culled."))
