@@ -60,8 +60,8 @@ public class BlockBreakGoal extends Goal {
     private int prevfailedBlockFindings;
     private int prevblockFindingIdleTicks;
 
-    private final boolean debug = true;
-    private final boolean blockdebug = true;
+    private final boolean debug = false;
+    private final boolean blockdebug = false;
 
     private Path cachedPath = null;
     private int pathUpdateCounter = 0;
