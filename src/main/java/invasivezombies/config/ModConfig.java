@@ -1,6 +1,6 @@
 package invasivezombies.config;
 
-import invasivezombies.VersionHelper; // Assuming this exists in your project
+import invasivezombies.VersionHelper;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -215,18 +215,7 @@ public class ModConfig {
     }
 
     private static void loadOrCreateBlockConfig() {
-        // configErrors.clear(); // Original code did this. If other errors should persist, this needs refinement.
-        // For strict "original code" adherence, it's kept.
-        // If you want errors from settings load to persist, remove this line
-        // or make error clearing more granular.
-        // To keep settings errors and only clear block errors, you would:
-        // List<String> nonBlockErrors = configErrors.stream().filter(e -> !e.contains("block")).collect(Collectors.toList());
-        // configErrors.clear();
-        // configErrors.addAll(nonBlockErrors);
-        // For now, sticking to original code's apparent full clear:
         configErrors.clear();
-
-
         try {
             Path dir = configPath.getParent(); // configPath is for mineable.json
             if (dir != null && !Files.exists(dir)) {
@@ -436,7 +425,7 @@ public class ModConfig {
                     }
                 } else {
                     String error = "Skipping invalid block ID during save: " + block + " (" + validationError + ")";
-                    // LOGGER.warn(error); // Original didn't log this specifically here but added to configErrors in GUI save
+                    LOGGER.warn(error);
                     tempSaveErrors.add(error);
                 }
             }
