@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "id": "invasivezombies",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "name": "Invasive Zombies",
     "description": "Allows zombies to break blocks to reach the player",
     "authors": [
@@ -14,7 +14,7 @@
             "invasivezombies.InvasiveZombies"
         ],
         "modmenu": [
-            "invasivezombies.config.ModConfig"
+            "invasivezombies.client.ModMenuClient"
         ]
     },
     "mixins": [
