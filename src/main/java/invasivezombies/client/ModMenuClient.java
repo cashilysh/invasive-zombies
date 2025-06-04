@@ -206,7 +206,7 @@ public class ModMenuClient implements ModMenuApi {
                                 settings.setDoorSearchDistance(adjustedValue);
                             })
                             .setTooltip(Text.literal("Square search distance for breakable doors around the zombie. NO blocks behind are culled."))
-                            .setTextGetter(value -> Text.literal( (value * 2) + "x" + (value * 2) + " blocks"))
+                            .setTextGetter(value -> Text.literal( (value / 6 * 6 * 2) + "x" + (value / 6 * 6 * 2) + " blocks"))
                             .setMin(6).setMax(24)
                             .build());
 
