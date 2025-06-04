@@ -9,4 +9,4 @@ mOgUt4GM
 
 1.0.6
 
-- Added server compatibility
+- Added server compatibility (Mod-config files have to manually edited)
