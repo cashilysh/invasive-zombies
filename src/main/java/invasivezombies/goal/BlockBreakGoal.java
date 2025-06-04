@@ -821,7 +821,7 @@ public class BlockBreakGoal extends Goal {
             goal.breakProgress = 0;
             goal.blockFindingIdleTicks = 0;
             goalMap.remove(zombie); // Remove after cleanup
-            System.out.println("Goal stopped externally");
+            if (debug) System.out.println("Goal stopped externally");
         }
     }
 
