@@ -1,10 +1,10 @@
 {
   "versionMappings": {
-    "1.21.6-pre3": {
-      "yarn": "net.fabricmc:yarn:1.21.6-pre3+build.1:v2",
+    "1.21.6": {
+      "yarn": "net.fabricmc:yarn:1.21.6+build.1:v2",
       "loader": "0.16.10",
-      "fabricApi": "0.126.0+1.21.6",
-      "modMenu": "14.0.0-rc.2",
+      "fabricApi": "0.127.0+1.21.6",
+      "modMenu": "15.0.0-beta.1",
       "clothConfig": "18.0.145"
     },
     "1.21.5": {
