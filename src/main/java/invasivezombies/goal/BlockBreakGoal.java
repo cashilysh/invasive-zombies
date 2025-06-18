@@ -864,6 +864,7 @@ public class BlockBreakGoal extends Goal {
             noPathTicks++;
         }
 
+        //Buffer time - if there temporarily isnt any path available (zombie jumping)
         if (noPathTicks > 5) {
             if (debug) System.out.println("No path within 5 ticks");
             noPathTicks = 0;
@@ -1079,6 +1080,9 @@ public class BlockBreakGoal extends Goal {
         if (settings.getTargetBlockParticlesEnabled()) {
             spawnTargetBlockParticles(world);
         }
+
+
+        //Main logic
 
         if (isWithinMiningRange(targetBlock)) {
             performMining(world);
