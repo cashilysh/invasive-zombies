@@ -1,8 +1,8 @@
 @echo off
 
 echo.
-echo Starting build for Minecraft 1.21.6...
-call gradlew build -PtargetVersion=1.21.6
+echo Starting build for lastest Minecraft version...
+call gradlew build
 if errorlevel 1 goto error
 
 

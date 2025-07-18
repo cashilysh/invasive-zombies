@@ -156,7 +156,7 @@ public class ModMenuClient implements ModMenuApi {
                     entryBuilder.startIntField(Text.literal("Zombie Lock-Target Range"), settings.getTargetRange())
                             .setDefaultValue(defaults.getTargetRange()).setMin(1).setMax(100)
                             .setSaveConsumer(settings::setTargetRange)
-                            .setTooltip(Text.literal("In what radius zombies will keep their target, even without line-of-sight"))
+                            .setTooltip(Text.literal("In what radius zombies will keep their target, even without line-of-sight (X-Ray vision)"))
                             .build());
 
             zombieSettingsCategory.addEntry(
