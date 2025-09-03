@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "id": "invasivezombies",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "name": "Invasive Zombies",
     "description": "Allows zombies to break blocks to reach the player",
     "authors": [
@@ -24,7 +24,7 @@
         "fabricloader": ">=0.14.22",
         "minecraft": "~1.21.8",
         "java": ">=17",
-        "fabric-api": ">=0.131.0+1.21.8",
+        "fabric-api": ">=0.133.0+1.21.8",
         "cloth-config": "*"
     }
 }
