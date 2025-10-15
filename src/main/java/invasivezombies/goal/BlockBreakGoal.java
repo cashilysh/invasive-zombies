@@ -238,16 +238,16 @@ public class BlockBreakGoal extends Goal {
 
         if (new Random().nextInt(2) == 0) return null;
 
-        World world = zombie.getWorld();
+        World world = zombie.getEntityWorld();
         LivingEntity target = zombie.getTarget();
-        Vec3d zombiePos = zombie.getPos();
+        Vec3d zombiePos = zombie.getEntityPos();
         Direction facing = zombie.getHorizontalFacing();
 
-        if (!(world instanceof ServerWorld) || target == null || zombiePos == null || target.getPos() == null || facing == null) {
+        if (!(world instanceof ServerWorld) || target == null || zombiePos == null || target.getEntityPos() == null || facing == null) {
             return null;
         }
 
-        Vec3d targetPos = target.getPos(); // Now safe to access
+        Vec3d targetPos = target.getEntityPos(); // Now safe to access
 
         int[] heightRange = getminYmaxYAtEndNode(zombiePos, targetPos);
 
@@ -695,11 +695,11 @@ public class BlockBreakGoal extends Goal {
 
     private boolean canPathToBlockAndIsAccessible(BlockPos blockpos) {
         // Early validation - no change needed
-        if (zombie == null || zombie.getWorld() == null || blockpos == null) return false;
+        if (zombie == null || zombie.getEntityWorld() == null || blockpos == null) return false;
 
-        World world = zombie.getWorld();
+        World world = zombie.getEntityWorld();
         LivingEntity target = zombie.getTarget();
-        Vec3d targetPos = target.getPos(); // Now safe to access
+        Vec3d targetPos = target.getEntityPos(); // Now safe to access
 
 
         // Only now find path (expensive operation)
@@ -797,7 +797,7 @@ public class BlockBreakGoal extends Goal {
 
     @Override
     public void stop() {
-        World world = zombie.getWorld();
+        World world = zombie.getEntityWorld();
 
         if (world != null && targetBlock != null && zombie != null) {
             world.setBlockBreakingInfo(zombie.getId(), targetBlock, -1);
@@ -812,7 +812,7 @@ public class BlockBreakGoal extends Goal {
     public static synchronized void resetMiningState(ZombieEntity zombie) {
         BlockBreakGoal goal = goalMap.get(zombie); // Get without removing first
         if (goal != null) {
-            World world = zombie.getWorld();
+            World world = zombie.getEntityWorld();
             if (world != null && goal.targetBlock != null) {
                 world.setBlockBreakingInfo(zombie.getId(), goal.targetBlock, -1);
                 currentlyMining.remove(goal.targetBlock);
@@ -845,7 +845,7 @@ public class BlockBreakGoal extends Goal {
             prevblockFindingIdleTicks = blockFindingIdleTicks;
         }
 
-        if (zombie == null || zombie.getWorld() == null) {
+        if (zombie == null || zombie.getEntityWorld() == null) {
             return false;
         }
 
@@ -974,12 +974,12 @@ public class BlockBreakGoal extends Goal {
     }
 
     private void completeBlockBreak() {
-        if (zombie == null || zombie.getWorld() == null || zombie.getWorld() == null || targetBlock == null) {
+        if (zombie == null || zombie.getEntityWorld() == null || zombie.getEntityWorld() == null || targetBlock == null) {
             return;
         }
 
-        zombie.getWorld().breakBlock(targetBlock, true);
-        zombie.getWorld().setBlockBreakingInfo(zombie.getId(), targetBlock, -1);
+        zombie.getEntityWorld().breakBlock(targetBlock, true);
+        zombie.getEntityWorld().setBlockBreakingInfo(zombie.getId(), targetBlock, -1);
 
         currentlyMining.remove(targetBlock);
         targetBlock = null;
@@ -995,7 +995,7 @@ public class BlockBreakGoal extends Goal {
 
         //Sanity Checks
 
-        World world = zombie.getWorld();
+        World world = zombie.getEntityWorld();
 
         if (zombie == null || world == null || !zombie.isAlive()) {
             stop();
@@ -1032,7 +1032,7 @@ public class BlockBreakGoal extends Goal {
         }
 
         //If Block is not existing anymore, COMPLETE blockbreak and find new block
-        if (zombie.getWorld().
+        if (zombie.getEntityWorld().
 
                 getBlockState(targetBlock).
 
@@ -1231,7 +1231,7 @@ public class BlockBreakGoal extends Goal {
 
             if (path != null && path.getEnd() != null) {
 
-                ServerWorld serverWorld = (ServerWorld) zombie.getWorld();
+                ServerWorld serverWorld = (ServerWorld) zombie.getEntityWorld();
 
 
                 // End node (green) - happy villager particles

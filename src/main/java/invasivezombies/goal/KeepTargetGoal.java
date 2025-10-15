@@ -33,7 +33,7 @@ public class KeepTargetGoal extends Goal {
 
     @Override
     public boolean canStart() {
-        if (zombie == null || zombie.getWorld() == null) return false;
+        if (zombie == null || zombie.getEntityWorld() == null) return false;
 
 
         validateCurrentTarget();
@@ -118,7 +118,7 @@ public class KeepTargetGoal extends Goal {
         double rangeSquared = range * range;
 
         // Use getEntitiesByClass for better performance than getPlayers()
-        for (PlayerEntity player : zombie.getWorld().getEntitiesByClass(
+        for (PlayerEntity player : zombie.getEntityWorld().getEntitiesByClass(
                 PlayerEntity.class,
                 zombie.getBoundingBox().expand(range),
                 player -> player.isAlive() && !player.isSpectator() && !player.isCreative() &&
@@ -139,7 +139,7 @@ public class KeepTargetGoal extends Goal {
         double closestDistance = Double.MAX_VALUE;
         double rangeSquared = range * range;
 
-        for (VillagerEntity villager : zombie.getWorld().getEntitiesByClass(
+        for (VillagerEntity villager : zombie.getEntityWorld().getEntitiesByClass(
                 VillagerEntity.class,
                 zombie.getBoundingBox().expand(range),
                 villager -> villager.isAlive() &&
