@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.11-SNAPSHOT'
+    id 'fabric-loom' version '1.14-SNAPSHOT'
     id 'maven-publish'
 }
 
@@ -70,7 +70,7 @@ def loadVersionMappings() {
         if (versionEntry.stable) {
             def mcVersion = versionEntry.version
 
-            // The API returns versions newest-first, so the first stable one we find is the latest.
+            // The API returns +s newest-first, so the first stable one we find is the latest.
             if (detectedLatestStableVersion == null) {
                 detectedLatestStableVersion = mcVersion
             }
@@ -111,9 +111,18 @@ loadVersionMappings()
 def targetVersion = project.hasProperty('targetVersion') ? project.targetVersion : latestStableVersion
 
 afterEvaluate {
+	println ""
     println "Automatically set latest stable version to: ${latestStableVersion}"
+	println ""
     println "Loaded version_mappings for ${versionMappings.size()} Minecraft versions (${versionMappings.keySet().join(', ')})"
-    println "Current build target is: ${targetVersion}"
+	println ""
+	println ""
+    println "Mod Version:"
+	println ">  ${version}"
+	println ""
+	println "Build target:"
+	println ">  ${targetVersion}"
+	println ""
 }
 
 
