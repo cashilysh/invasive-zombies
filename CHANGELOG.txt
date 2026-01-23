@@ -10,3 +10,8 @@ mOgUt4GM
 1.0.6
 
 - Added server compatibility (Mod-config files have to manually edited)
+
+
+1.0.7
+
+- Zombie Piglins do not auto-target the player anymore

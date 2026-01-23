@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
     "id": "invasivezombies",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "name": "Invasive Zombies",
     "description": "Allows zombies to break blocks to reach the player",
     "authors": [

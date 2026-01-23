@@ -6,15 +6,14 @@ import invasivezombies.goal.KeepTargetGoal;
 
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.mob.ZombieEntity;
+import net.minecraft.entity.mob.ZombifiedPiglinEntity;
 
 import net.minecraft.entity.ai.goal.MoveThroughVillageGoal;
-import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.world.LocalDifficulty;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -29,6 +28,10 @@ public abstract class ZombieEntityMixin {
     @Inject(method = "initGoals", at = @At("TAIL"))
     private void addBlockBreakGoal(CallbackInfo info) {
         ZombieEntity zombie = (ZombieEntity) (Object) this;
+
+        if (zombie instanceof ZombifiedPiglinEntity) {
+            return;
+        }
 
 
         // Remove the BreakDoorGoal & MoveThroughVillageGoal if it exists

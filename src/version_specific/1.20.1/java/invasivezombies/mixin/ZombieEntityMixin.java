@@ -4,7 +4,7 @@ import invasivezombies.config.ModConfig;
 import invasivezombies.goal.BlockBreakGoal;
 import invasivezombies.goal.KeepTargetGoal;
 
-
+import net.minecraft.entity.mob.ZombifiedPiglinEntity;
 import net.minecraft.entity.ai.goal.MoveThroughVillageGoal;
 import net.minecraft.entity.mob.ZombieEntity;
 import net.minecraft.entity.attribute.EntityAttributes;
@@ -21,6 +21,12 @@ public abstract class ZombieEntityMixin {
     @Inject(method = "initGoals", at = @At("TAIL"))
     private void addBlockBreakGoal(CallbackInfo info) {
         ZombieEntity zombie = (ZombieEntity) (Object) this;
+
+
+        if (zombie instanceof ZombifiedPiglinEntity) {
+            return;
+        }
+
 
 
         // Remove the BreakDoorGoal & MoveThroughVillageGoal if it exists
