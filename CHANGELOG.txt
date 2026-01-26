@@ -15,3 +15,8 @@ mOgUt4GM
 1.0.7
 
 - Zombie Piglins do not auto-target the player anymore
+
+1.0.8
+
+- Compiled with Java 21
+- Update Gradle-Wrapper and Loom
