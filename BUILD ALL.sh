@@ -20,7 +20,17 @@ echo "Building mod for all Minecraft versions..."
 # ./gradlew clean
 
 build_version "1.19.4"
+
 build_version "1.20.1"
+
+build_version "1.21.1"
+build_version "1.21.2"
+build_version "1.21.3"
+build_version "1.21.4"
+build_version "1.21.5"
+build_version "1.21.6"
+build_version "1.21.7"
+build_version "1.21.8"
 build_version "1.21.9"
 build_version "1.21.10"
 build_version "1.21.11"

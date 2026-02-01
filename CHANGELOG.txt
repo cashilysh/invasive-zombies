@@ -18,5 +18,5 @@ mOgUt4GM
 
 1.0.8
 
-- Compiled with Java 21
+- Compiled with Java 21, fixes incompatibility
 - Update Gradle-Wrapper and Loom
