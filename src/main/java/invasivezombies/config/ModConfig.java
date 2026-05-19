@@ -8,9 +8,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.InvalidIdentifierException;
+import net.minecraft.IdentifierException;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -347,12 +347,12 @@ public class ModConfig {
                 } else {
                     try {
                         Identifier identifier = VersionHelper.CustomIdentifier(id);
-                        if (Registries.BLOCK.containsId(identifier)) {
+                        if (BuiltInRegistries.BLOCK.containsKey(identifier)) {
                             mineableBlocks.add(id);
                         } else {
                             configErrors.add("Block does not exist in game registry (during load of " + configPath.getFileName() + "): " + id);
                         }
-                    } catch (InvalidIdentifierException e) {
+                    } catch (IdentifierException e) {
                         configErrors.add("Invalid block ID format at index " + i + " (during load of " + configPath.getFileName() + "): " + id + " (" + e.getMessage() + ")");
                     }
                 }
@@ -380,10 +380,10 @@ public class ModConfig {
         }
         try {
             Identifier identifier = VersionHelper.CustomIdentifier(blockId);
-            if (isInitialized && !Registries.BLOCK.containsId(identifier)) {
+            if (isInitialized && !BuiltInRegistries.BLOCK.containsKey(identifier)) {
                 return "Block does not exist in game registry: " + blockId;
             }
-        } catch (InvalidIdentifierException e) {
+        } catch (IdentifierException e) {
             return "Invalid block identifier: " + e.getMessage();
         }
         return null;

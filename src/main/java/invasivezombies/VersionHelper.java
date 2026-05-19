@@ -1,6 +1,6 @@
 package invasivezombies;
 
-import net.minecraft.util.Identifier;
+import net.minecraft.resources.Identifier;
 
 public class VersionHelper {
 	

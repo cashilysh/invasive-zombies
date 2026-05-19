@@ -3,15 +3,13 @@ package invasivezombies;
 import invasivezombies.goal.BlockBreakGoal;
 
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLevelEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.entity.mob.ZombieEntity;
-import net.minecraft.util.Identifier;
-
-
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.fabricmc.api.EnvType;
 
 
@@ -38,24 +36,24 @@ public class InvasiveZombies implements ModInitializer {
         }
 
 
-        ServerWorldEvents.LOAD.register((server, world) -> BlockBreakGoal.resetAllMiningStates());
+        ServerLevelEvents.LOAD.register((server, world) -> BlockBreakGoal.resetAllMiningStates());
 
-        ServerWorldEvents.UNLOAD.register((server, world) -> BlockBreakGoal.resetAllMiningStates());
+        ServerLevelEvents.UNLOAD.register((server, world) -> BlockBreakGoal.resetAllMiningStates());
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (entity instanceof ZombieEntity zombie) {
+            if (entity instanceof Zombie zombie) {
                BlockBreakGoal.resetMiningState(zombie);
             }
         });
 
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
-            if (entity instanceof ZombieEntity zombie) {
+            if (entity instanceof Zombie zombie) {
                 BlockBreakGoal.resetMiningState(zombie);
             }
         });
 
-        ServerEntityWorldChangeEvents.AFTER_ENTITY_CHANGE_WORLD.register((originalEntity, newEntity, origin, destination) -> {
-            if (newEntity instanceof ZombieEntity zombie) {
+        ServerEntityLevelChangeEvents.AFTER_ENTITY_CHANGE_LEVEL.register((originalEntity, newEntity, origin, destination) -> {
+            if (newEntity instanceof Zombie zombie) {
                 BlockBreakGoal.resetMiningState(zombie);
             }
         });

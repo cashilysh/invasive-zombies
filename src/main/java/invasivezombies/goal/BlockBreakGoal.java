@@ -3,36 +3,33 @@ package invasivezombies.goal;
 import invasivezombies.config.ModConfig;
 import invasivezombies.VersionHelper;
 import invasivezombies.mixin.MobEntityAccessor;
-
-import net.minecraft.block.Blocks;
-import net.minecraft.entity.ai.pathing.MobNavigation;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.BlockSoundGroup;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.particle.BlockStateParticleEffect;
-import net.minecraft.particle.ParticleTypes;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.ZombieEntity;
-import net.minecraft.entity.ai.goal.GoalSelector;
-import net.minecraft.entity.ai.goal.Goal;
-import net.minecraft.entity.ai.pathing.Path;
-import net.minecraft.entity.ai.pathing.PathNode;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.ai.goal.GoalSelector;
+import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
+import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SoundType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.pathfinder.Node;
+import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +45,7 @@ public class BlockBreakGoal extends Goal {
     private static final float VERTICAL_MINING_RANGE = 3.0F; //initial mining range
 
 
-    private final ZombieEntity zombie;
+    private final Zombie zombie;
     private BlockPos targetBlock;
     private int miningTicks;
     private float breakProgress;
@@ -77,17 +74,17 @@ public class BlockBreakGoal extends Goal {
 
     private static final Set<BlockPos> currentlyMining = Collections.newSetFromMap(new ConcurrentHashMap<>(MAX_MINING_POSITIONS));
 
-    private static final Map<ZombieEntity, BlockBreakGoal> goalMap = new ConcurrentHashMap<>();
+    private static final Map<Zombie, BlockBreakGoal> goalMap = new ConcurrentHashMap<>();
     private static final Map<String, TagKey<Block>> tagCache = new ConcurrentHashMap<>();
 
     private static volatile Set<String> breakableBlocks;
     private static final Object INIT_LOCK = new Object();
 
 
-    public BlockBreakGoal(ZombieEntity zombie) {
+    public BlockBreakGoal(Zombie zombie) {
         this.zombie = zombie;
         goalMap.put(zombie, this); // Register the goal for this zombie
-        this.setControls(EnumSet.of(Goal.Control.LOOK, Goal.Control.MOVE)); // Added control flags
+        this.setFlags(EnumSet.of(Goal.Flag.LOOK, Goal.Flag.MOVE)); // Added control flags
         loadBreakableBlocks();
     }
 
@@ -104,7 +101,7 @@ public class BlockBreakGoal extends Goal {
     }
 
     @Override
-    public boolean canStart() {
+    public boolean canUse() {
         if (debug && (prevfailedBlockFindings < failedBlockFindings)) {
             System.out.println("canStart() FBF: " + failedBlockFindings);
             prevfailedBlockFindings = failedBlockFindings;
@@ -118,7 +115,7 @@ public class BlockBreakGoal extends Goal {
             return false;
         }
 
-        if (zombie.getNavigation().isFollowingPath()) {
+        if (zombie.getNavigation().isInProgress()) {
             if (debug) System.out.println("Zombie is still following a path!");
             return false;
         }
@@ -127,12 +124,12 @@ public class BlockBreakGoal extends Goal {
         Path path = getCachedPathToTarget();
 
         // If we have a valid path to target, no need to break blocks
-        if (path != null && path.reachesTarget() && path.isFinished()) {
+        if (path != null && path.canReach() && path.isDone()) {
             return false;
         }
 
         // Try to find a block to break if path exists but doesn't reach target
-        if (path != null && !path.reachesTarget()) {
+        if (path != null && !path.canReach()) {
             BlockPos blockToBreak = findBlockToBreak();
             // Only select this block if it's valid and not being mined by another zombie
             if (blockToBreak != null && !currentlyMining.contains(blockToBreak)) {
@@ -149,22 +146,22 @@ public class BlockBreakGoal extends Goal {
     }
 
 
-    private boolean isBlockAccessibleFromDirection(World world, BlockPos targetBlock, BlockPos startPos) {
-        Vec3d startPosBottom;
-        Vec3d startPosTop;
+    private boolean isBlockAccessibleFromDirection(Level world, BlockPos targetBlock, BlockPos startPos) {
+        Vec3 startPosBottom;
+        Vec3 startPosTop;
 
-        startPosBottom = new Vec3d(
-                startPos.getX() + (zombie.getWidth() / 2.0),
+        startPosBottom = new Vec3(
+                startPos.getX() + (zombie.getBbWidth() / 2.0),
                 startPos.getY() + 0.5,
-                startPos.getZ() + (zombie.getWidth() / 2.0)
+                startPos.getZ() + (zombie.getBbWidth() / 2.0)
         );
-        startPosTop = new Vec3d(
-                startPos.getX() + (zombie.getWidth() / 2.0),
-                startPos.getY() + zombie.getHeight() - 0.5,
-                startPos.getZ() + (zombie.getWidth() / 2.0)
+        startPosTop = new Vec3(
+                startPos.getX() + (zombie.getBbWidth() / 2.0),
+                startPos.getY() + zombie.getBbHeight() - 0.5,
+                startPos.getZ() + (zombie.getBbWidth() / 2.0)
         );
 
-        Vec3d targetPos = new Vec3d(
+        Vec3 targetPos = new Vec3(
                 targetBlock.getX() + 0.5,
                 targetBlock.getY() + 0.5,
                 targetBlock.getZ() + 0.5
@@ -174,12 +171,12 @@ public class BlockBreakGoal extends Goal {
                 hasLineOfSight(world, startPosTop, targetPos, targetBlock);
     }
 
-    private boolean hasLineOfSight(World world, Vec3d start, Vec3d end, BlockPos targetBlock) {
+    private boolean hasLineOfSight(Level world, Vec3 start, Vec3 end, BlockPos targetBlock) {
         double distance = start.distanceTo(end);
-        Vec3d ray = end.subtract(start).normalize();
+        Vec3 ray = end.subtract(start).normalize();
 
         for (double d = 0.30; d < distance - 0.30; d += 0.30) {
-            Vec3d checkPoint = start.add(ray.multiply(d));
+            Vec3 checkPoint = start.add(ray.scale(d));
 
             BlockPos checkPos = new BlockPos((int) Math.floor(checkPoint.x), (int) Math.floor(checkPoint.y), (int) Math.floor(checkPoint.z));
 
@@ -195,7 +192,7 @@ public class BlockBreakGoal extends Goal {
         return true;
     }
 
-    private int[] getminYmaxYAtEndNode(Vec3d endPos, Vec3d targetpos) {
+    private int[] getminYmaxYAtEndNode(Vec3 endPos, Vec3 targetpos) {
 
         int minY, maxY, zombieBelowTarget;
 
@@ -238,16 +235,16 @@ public class BlockBreakGoal extends Goal {
 
         if (new Random().nextInt(2) == 0) return null;
 
-        World world = zombie.getEntityWorld();
+        Level world = zombie.level();
         LivingEntity target = zombie.getTarget();
-        Vec3d zombiePos = zombie.getEntityPos();
-        Direction facing = zombie.getHorizontalFacing();
+        Vec3 zombiePos = zombie.position();
+        Direction facing = zombie.getDirection();
 
-        if (!(world instanceof ServerWorld) || target == null || zombiePos == null || target.getEntityPos() == null || facing == null) {
+        if (!(world instanceof ServerLevel) || target == null || zombiePos == null || target.position() == null || facing == null) {
             return null;
         }
 
-        Vec3d targetPos = target.getEntityPos(); // Now safe to access
+        Vec3 targetPos = target.position(); // Now safe to access
 
         int[] heightRange = getminYmaxYAtEndNode(zombiePos, targetPos);
 
@@ -256,7 +253,7 @@ public class BlockBreakGoal extends Goal {
         int zombieBelowTarget = heightRange[2];
 
 
-        double distanceToTarget = Math.sqrt(zombie.squaredDistanceTo(target));
+        double distanceToTarget = Math.sqrt(zombie.distanceToSqr(target));
 
         // Get zombie block position
         BlockPos zombieBlockPos = new BlockPos((int) Math.round(zombiePos.x), (int) Math.round(zombiePos.y), (int) Math.round(zombiePos.z));
@@ -274,13 +271,13 @@ public class BlockBreakGoal extends Goal {
 
 
         List<BlockPos> directPathBlocks = new ArrayList<>();
-        Vec3d directionVec = targetPos.subtract(zombiePos).normalize();
+        Vec3 directionVec = targetPos.subtract(zombiePos).normalize();
 
         int maxCheckDistance = (int) Math.min(distanceToTarget, 3.0);
 
         // First gather direct path blocks
         for (int i = 1; i <= maxCheckDistance; i++) {
-            Vec3d checkVec = zombiePos.add(directionVec.multiply(i));
+            Vec3 checkVec = zombiePos.add(directionVec.scale(i));
             int checkX = (int) Math.floor(checkVec.x);
             int checkZ = (int) Math.floor(checkVec.z);
 
@@ -331,7 +328,7 @@ public class BlockBreakGoal extends Goal {
 
         // Only if all direct path blocks are being mined, then check adjacent blocks
         for (int i = 1; i <= maxCheckDistance; i++) {
-            Vec3d checkVec = zombiePos.add(directionVec.multiply(i));
+            Vec3 checkVec = zombiePos.add(directionVec.scale(i));
             int checkX = (int) Math.floor(checkVec.x);
             int checkZ = (int) Math.floor(checkVec.z);
 
@@ -388,8 +385,8 @@ public class BlockBreakGoal extends Goal {
 
         if (path != null) {
 
-            PathNode endNode = path.getEnd();
-            Vec3d endPos = endNode.getPos();
+            Node endNode = path.getEndNode();
+            Vec3 endPos = endNode.asVec3();
             BlockPos endNodeBlockPos = new BlockPos((int) Math.round(endPos.x), (int) Math.round(endPos.y), (int) Math.round(endPos.z));
 
             int[] nodeHeightRange = getminYmaxYAtEndNode(endPos, targetPos);
@@ -443,7 +440,7 @@ public class BlockBreakGoal extends Goal {
             for (int x = -doorSearchRadius; x <= doorSearchRadius; x++) {
                 for (int y = -2; y <= 2; y++) {
                     for (int z = -doorSearchRadius; z <= doorSearchRadius; z++) {
-                        BlockPos doorPos = zombieBlockPos.add(x, y, z);
+                        BlockPos doorPos = zombieBlockPos.offset(x, y, z);
 
                         // Skip positions too far away
                         if (x * x + y * y + z * z > doorSearchRadius * doorSearchRadius) {
@@ -453,7 +450,7 @@ public class BlockBreakGoal extends Goal {
                         BlockState state = world.getBlockState(doorPos);
 
                         if (!state.isAir()) {
-                            if (state.isIn(BlockTags.DOORS) && isBreakableBlock(world, doorPos)) {
+                            if (state.is(BlockTags.DOORS) && isBreakableBlock(world, doorPos)) {
 
                                 if (canPathToBlockAndIsAccessible(doorPos)) {
                                     doorBlocks.add(doorPos);
@@ -488,9 +485,9 @@ public class BlockBreakGoal extends Goal {
                 dist <= checkRadius; dist++) {
             for (int y = minY; y <= maxY; y++) {
                 BlockPos checkPos = new BlockPos(
-                        zombieBlockPos.getX() + facing.getOffsetX() * dist,
+                        zombieBlockPos.getX() + facing.getStepX() * dist,
                         zombieBlockPos.getY() + y,
-                        zombieBlockPos.getZ() + facing.getOffsetZ() * dist);
+                        zombieBlockPos.getZ() + facing.getStepZ() * dist);
                 BlockState blockState = world.getBlockState(checkPos);
                 if (!blockState.isAir()) {
                     if (isBreakableBlock(world, checkPos)) {
@@ -516,8 +513,8 @@ public class BlockBreakGoal extends Goal {
         }
 
         // Then try adjacent positions if needed
-        int perpX = facing.getOffsetZ();
-        int perpZ = -facing.getOffsetX();
+        int perpX = facing.getStepZ();
+        int perpZ = -facing.getStepX();
 
         for (
                 int dist = 1;
@@ -525,9 +522,9 @@ public class BlockBreakGoal extends Goal {
             for (int y = minY; y <= maxY; y++) {
                 for (int offset = -1; offset <= 1; offset += 2) {
                     BlockPos adjacentPos = new BlockPos(
-                            zombieBlockPos.getX() + facing.getOffsetX() * dist + perpX * offset,
+                            zombieBlockPos.getX() + facing.getStepX() * dist + perpX * offset,
                             zombieBlockPos.getY() + y,
-                            zombieBlockPos.getZ() + facing.getOffsetZ() * dist + perpZ * offset);
+                            zombieBlockPos.getZ() + facing.getStepZ() * dist + perpZ * offset);
 
                     BlockState blockState = world.getBlockState(adjacentPos);
                     if (!blockState.isAir()) {
@@ -555,8 +552,8 @@ public class BlockBreakGoal extends Goal {
                     5, Comparator.comparingDouble(Map.Entry::getValue));
 
             // Get target coordinates
-            double tX = targetPos.getX();
-            double tZ = targetPos.getZ();
+            double tX = targetPos.x();
+            double tZ = targetPos.z();
             double zX = zombieBlockPos.getX();
             double zZ = zombieBlockPos.getZ();
 
@@ -590,10 +587,10 @@ public class BlockBreakGoal extends Goal {
                     for (int z = -FarBlockRange + myOffsetZ; z <= FarBlockRange; z += stepSize) {
 
 
-                        BlockPos blockPos = zombieBlockPos.add(x, y, z);
+                        BlockPos blockPos = zombieBlockPos.offset(x, y, z);
 
                         // Calculate distance from zombie
-                        double distanceSquared = zombieBlockPos.getSquaredDistance(blockPos);
+                        double distanceSquared = zombieBlockPos.distSqr(blockPos);
 
                         // Skip positions too far
                         if (distanceSquared > FarBlockRange * FarBlockRange) {
@@ -625,7 +622,7 @@ public class BlockBreakGoal extends Goal {
                         BlockState blockState = world.getBlockState(blockPos);
 
                         if (!blockState.isAir()) {
-                            if (!blockState.isOf(Blocks.GRASS_BLOCK)) {
+                            if (!blockState.is(Blocks.GRASS_BLOCK)) {
                                 if (!currentlyMining.contains(blockPos)) {
                                     if (isBreakableBlock(world, blockPos)) {
                                         if (canPathToBlockAndIsAccessible(blockPos)) {
@@ -654,11 +651,11 @@ public class BlockBreakGoal extends Goal {
                 BlockPos candidateBlock = candidate.getKey();
 
 
-                Path pathToBlock = zombie.getNavigation().findPathTo(candidateBlock, 0);
+                Path pathToBlock = zombie.getNavigation().createPath(candidateBlock, 0);
 
                 if (pathToBlock != null) {
 
-                    double distanceToBlock = Math.sqrt(zombieBlockPos.getSquaredDistance(candidateBlock));
+                    double distanceToBlock = Math.sqrt(zombieBlockPos.distSqr(candidateBlock));
 
                     // Add to priority queue using path length
                     topCandidates.offer(new AbstractMap.SimpleEntry<>(candidateBlock, distanceToBlock));
@@ -695,19 +692,19 @@ public class BlockBreakGoal extends Goal {
 
     private boolean canPathToBlockAndIsAccessible(BlockPos blockpos) {
         // Early validation - no change needed
-        if (zombie == null || zombie.getEntityWorld() == null || blockpos == null) return false;
+        if (zombie == null || zombie.level() == null || blockpos == null) return false;
 
-        World world = zombie.getEntityWorld();
+        Level world = zombie.level();
         LivingEntity target = zombie.getTarget();
-        Vec3d targetPos = target.getEntityPos(); // Now safe to access
+        Vec3 targetPos = target.position(); // Now safe to access
 
 
         // Only now find path (expensive operation)
-        Path blockPath = zombie.getNavigation().findPathTo(blockpos, 0);
-        if (blockPath == null || blockPath.getEnd() == null) return false;
+        Path blockPath = zombie.getNavigation().createPath(blockpos, 0);
+        if (blockPath == null || blockPath.getEndNode() == null) return false;
 
-        PathNode endNode = blockPath.getEnd();
-        Vec3d endPos = endNode.getPos();
+        Node endNode = blockPath.getEndNode();
+        Vec3 endPos = endNode.asVec3();
         BlockPos endNodeBlockPos = new BlockPos((int) Math.round(endPos.x), (int) Math.round(endPos.y), (int) Math.round(endPos.z));
 
         int[] heightRange = getminYmaxYAtEndNode(endPos, targetPos);
@@ -723,9 +720,9 @@ public class BlockBreakGoal extends Goal {
 
         // Calculate distances directly from the PathNode position
         // This avoids creating temporary BlockPos objects
-        double xDistance = Math.abs((endPos.getX() + zombie.getWidth() / 2.0) - (blockpos.getX() + 0.5));
-        double yDistance = Math.abs((endPos.getY() + zombie.getHeight() / 2.0) - (blockpos.getY() + 0.5));
-        double zDistance = Math.abs((endPos.getZ() + zombie.getWidth() / 2.0) - (blockpos.getZ() + 0.5));
+        double xDistance = Math.abs((endPos.x() + zombie.getBbWidth() / 2.0) - (blockpos.getX() + 0.5));
+        double yDistance = Math.abs((endPos.y() + zombie.getBbHeight() / 2.0) - (blockpos.getY() + 0.5));
+        double zDistance = Math.abs((endPos.z() + zombie.getBbWidth() / 2.0) - (blockpos.getZ() + 0.5));
 
         // Return result and be MORE STRICT about the nodeEnd position in relation to the targetBlock
         if (xDistance <= HORIZONTAL_MINING_RANGE && zDistance <= HORIZONTAL_MINING_RANGE && yDistance <= VERTICAL_MINING_RANGE) {
@@ -737,7 +734,7 @@ public class BlockBreakGoal extends Goal {
     }
 
 
-    public static boolean isBreakableBlock(World world, BlockPos pos) {
+    public static boolean isBreakableBlock(Level world, BlockPos pos) {
         if (world == null || pos == null) {
             return false;
         }
@@ -746,11 +743,11 @@ public class BlockBreakGoal extends Goal {
             BlockState state = world.getBlockState(pos);
             Block block = state.getBlock();
 
-            if (state.isAir() || state.getHardness(world, pos) < 0) {
+            if (state.isAir() || state.getDestroySpeed(world, pos) < 0) {
                 return false;
             }
 
-            Identifier blockId = Registries.BLOCK.getId(block);
+            Identifier blockId = BuiltInRegistries.BLOCK.getKey(block);
 
             // Direct ID check first (faster)
             for (String entry : breakableBlocks) {
@@ -765,8 +762,8 @@ public class BlockBreakGoal extends Goal {
                 if (entry.startsWith("#")) {
                     String tagPath = entry.substring(1);
                     TagKey<Block> tagKey = tagCache.computeIfAbsent(tagPath,
-                            path -> TagKey.of(RegistryKeys.BLOCK, VersionHelper.CustomIdentifier(path)));
-                    if (block.getDefaultState().isIn(tagKey)) {
+                            path -> TagKey.create(Registries.BLOCK, VersionHelper.CustomIdentifier(path)));
+                    if (block.defaultBlockState().is(tagKey)) {
                         return true;
                     }
                 }
@@ -779,9 +776,9 @@ public class BlockBreakGoal extends Goal {
         }
     }
 
-    private float getBlockStrength(World world, BlockPos pos) {
+    private float getBlockStrength(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
-        float hardness = state.getHardness(world, pos);
+        float hardness = state.getDestroySpeed(world, pos);
         if (hardness < 0) return 0.0F;
         return (2.0F / hardness / 250F) * MINING_SPEED;
     }
@@ -797,10 +794,10 @@ public class BlockBreakGoal extends Goal {
 
     @Override
     public void stop() {
-        World world = zombie.getEntityWorld();
+        Level world = zombie.level();
 
         if (world != null && targetBlock != null && zombie != null) {
-            world.setBlockBreakingInfo(zombie.getId(), targetBlock, -1);
+            world.destroyBlockProgress(zombie.getId(), targetBlock, -1);
             currentlyMining.remove(targetBlock);
         }
         targetBlock = null;
@@ -809,12 +806,12 @@ public class BlockBreakGoal extends Goal {
         if (debug) System.out.println("Goal stopped");
     }
 
-    public static synchronized void resetMiningState(ZombieEntity zombie) {
+    public static synchronized void resetMiningState(Zombie zombie) {
         BlockBreakGoal goal = goalMap.get(zombie); // Get without removing first
         if (goal != null) {
-            World world = zombie.getEntityWorld();
+            Level world = zombie.level();
             if (world != null && goal.targetBlock != null) {
-                world.setBlockBreakingInfo(zombie.getId(), goal.targetBlock, -1);
+                world.destroyBlockProgress(zombie.getId(), goal.targetBlock, -1);
                 currentlyMining.remove(goal.targetBlock);
             }
             goal.targetBlock = null;
@@ -828,16 +825,16 @@ public class BlockBreakGoal extends Goal {
 
     public void setAndValidateTargetAgain() {
         GoalSelector goalSelector = ((MobEntityAccessor) zombie).getGoalSelector();
-        for (Goal goal : goalSelector.getGoals()) {
+        for (Goal goal : goalSelector.getAvailableGoals()) {
             if (goal instanceof KeepTargetGoal keepTargetGoal) {
-                keepTargetGoal.canStart();
+                keepTargetGoal.canUse();
                 if (debug) System.out.println("KeepTargetGoal canStart() executed!");
             }
         }
     }
 
     @Override
-    public boolean shouldContinue() {
+    public boolean canContinueToUse() {
 
         if (debug && ((prevfailedBlockFindings < failedBlockFindings) || (blockFindingIdleTicks < prevblockFindingIdleTicks))) {
             System.out.println("shouldContinue() FBF: " + failedBlockFindings + " | idle Ticks block pathing: " + blockFindingIdleTicks);
@@ -845,7 +842,7 @@ public class BlockBreakGoal extends Goal {
             prevblockFindingIdleTicks = blockFindingIdleTicks;
         }
 
-        if (zombie == null || zombie.getEntityWorld() == null) {
+        if (zombie == null || zombie.level() == null) {
             return false;
         }
 
@@ -858,7 +855,7 @@ public class BlockBreakGoal extends Goal {
         }
 
 
-        Path path = zombie.getNavigation().findPathTo(zombie.getTarget(), 0);
+        Path path = zombie.getNavigation().createPath(zombie.getTarget(), 0);
 
         if (path == null) {
             noPathTicks++;
@@ -884,16 +881,16 @@ public class BlockBreakGoal extends Goal {
         if (path == null && noPathTicks < 5) return true;
 
         // Continue breaking current block if it exists and is still breakable
-        if (path != null && !path.reachesTarget() && !path.isFinished()) {
+        if (path != null && !path.canReach() && !path.isDone()) {
             return true;
         }
 
 
         if (debug) {
             System.out.println(path);
-            System.out.println("reachesTarget(): " + path.reachesTarget());
-            System.out.println("isFinished(): " + path.isFinished());
-            System.out.println("End Node: " + path.getEnd());
+            System.out.println("reachesTarget(): " + path.canReach());
+            System.out.println("isFinished(): " + path.isDone());
+            System.out.println("End Node: " + path.getEndNode());
             System.out.println("Targetblock: " + targetBlock);
             System.out.println("Entity Target: " + zombie.getTarget());
             System.out.println("Should continue returning false");
@@ -907,12 +904,12 @@ public class BlockBreakGoal extends Goal {
         Path path = getCachedPathToTarget();
 
         // If there's no path, pathing is not a better option
-        if (path == null || path.getEnd() == null || path.getLength() < 30 || zombie.getTarget().getBlockPos() == null) {
+        if (path == null || path.getEndNode() == null || path.getNodeCount() < 30 || zombie.getTarget().blockPosition() == null) {
             return false;
         }
 
         // Get target position
-        BlockPos targetPos = zombie.getTarget().getBlockPos();
+        BlockPos targetPos = zombie.getTarget().blockPosition();
 
         // If there's no target, pathing is not a better option
         if (targetPos == null) {
@@ -920,16 +917,16 @@ public class BlockBreakGoal extends Goal {
         }
 
         // Get current zombie position
-        BlockPos zombieBlockPos = zombie.getBlockPos();
+        BlockPos zombieBlockPos = zombie.blockPosition();
 
         // Get end node of the path
-        PathNode endNode = path.getEnd();
-        Vec3d endPos = endNode.getPos();
+        Node endNode = path.getEndNode();
+        Vec3 endPos = endNode.asVec3();
         BlockPos nodeBlockPos = new BlockPos((int) Math.round(endPos.x), (int) Math.round(endPos.y), (int) Math.round(endPos.z));
 
         // Calculate distances
-        double zombieDistanceToTarget = zombieBlockPos.getSquaredDistance(targetPos);
-        double zombieDistanceFromEndNodeToTarget = nodeBlockPos.getSquaredDistance(targetPos);
+        double zombieDistanceToTarget = zombieBlockPos.distSqr(targetPos);
+        double zombieDistanceFromEndNodeToTarget = nodeBlockPos.distSqr(targetPos);
 
 
         // Check if the path end is significantly closer to the target (by at least 10 blocks)
@@ -955,17 +952,17 @@ public class BlockBreakGoal extends Goal {
         }
 
         // Get current position
-        BlockPos targetPos = target.getBlockPos();
+        BlockPos targetPos = target.blockPosition();
 
         // Check if we need to update the path
         pathUpdateCounter++;
 
         if (pathUpdateCounter >= PATH_UPDATE_INTERVAL || cachedPath == null ||
-                cachedPath.isFinished() ||
+                cachedPath.isDone() ||
                 (lastTargetPos != null && !lastTargetPos.equals(targetPos) &&
-                        lastTargetPos.getSquaredDistance(targetPos) > 1.0)) {
+                        lastTargetPos.distSqr(targetPos) > 1.0)) {
             // Only update if moved significantly
-            cachedPath = zombie.getNavigation().findPathTo(target, 0);
+            cachedPath = zombie.getNavigation().createPath(target, 0);
             pathUpdateCounter = 0;
             lastTargetPos = targetPos;
         }
@@ -974,12 +971,12 @@ public class BlockBreakGoal extends Goal {
     }
 
     private void completeBlockBreak() {
-        if (zombie == null || zombie.getEntityWorld() == null || zombie.getEntityWorld() == null || targetBlock == null) {
+        if (zombie == null || zombie.level() == null || zombie.level() == null || targetBlock == null) {
             return;
         }
 
-        zombie.getEntityWorld().breakBlock(targetBlock, true);
-        zombie.getEntityWorld().setBlockBreakingInfo(zombie.getId(), targetBlock, -1);
+        zombie.level().destroyBlock(targetBlock, true);
+        zombie.level().destroyBlockProgress(zombie.getId(), targetBlock, -1);
 
         currentlyMining.remove(targetBlock);
         targetBlock = null;
@@ -995,7 +992,7 @@ public class BlockBreakGoal extends Goal {
 
         //Sanity Checks
 
-        World world = zombie.getEntityWorld();
+        Level world = zombie.level();
 
         if (zombie == null || world == null || !zombie.isAlive()) {
             stop();
@@ -1023,8 +1020,8 @@ public class BlockBreakGoal extends Goal {
                 Path path = getCachedPathToTarget();
 
                 if (path != null) {
-                    zombie.getNavigation().startMovingAlong(path, 1.0);
-                    zombie.lookAtEntity(zombie.getTarget(), 1.0F, 1.0F);
+                    zombie.getNavigation().moveTo(path, 1.0);
+                    zombie.lookAt(zombie.getTarget(), 1.0F, 1.0F);
                 }
 
                 return;
@@ -1032,7 +1029,7 @@ public class BlockBreakGoal extends Goal {
         }
 
         //If Block is not existing anymore, COMPLETE blockbreak and find new block
-        if (zombie.getEntityWorld().
+        if (zombie.level().
 
                 getBlockState(targetBlock).
 
@@ -1063,14 +1060,14 @@ public class BlockBreakGoal extends Goal {
 
         //TargetBlock accquired -> Block sanity checks
 
-        if (targetBlock != null && !world.isChunkLoaded(targetBlock.getX() >> 4, targetBlock.getZ() >> 4)) {
+        if (targetBlock != null && !world.hasChunk(targetBlock.getX() >> 4, targetBlock.getZ() >> 4)) {
             stop();
             return;
         }
 
         if (world.getBlockState(targetBlock).
 
-                getHardness(world, targetBlock) <= 0) {
+                getDestroySpeed(world, targetBlock) <= 0) {
             stop();
             return;
         }
@@ -1093,22 +1090,22 @@ public class BlockBreakGoal extends Goal {
     }
 
 
-    private void performMining(World world) {
+    private void performMining(Level world) {
 
         zombie.getNavigation().stop();
 
-        if (!zombie.getNavigation().isIdle() || zombie.getNavigation().isFollowingPath()) {
-            zombie.setVelocity(0, zombie.getVelocity().y, 0);
+        if (!zombie.getNavigation().isDone() || zombie.getNavigation().isInProgress()) {
+            zombie.setDeltaMovement(0, zombie.getDeltaMovement().y, 0);
         }
 
         failedBlockFindings = 0;
 
         // Look at block while mining
-        zombie.getLookControl().lookAt(targetBlock.getX() + 0.5, targetBlock.getY(), targetBlock.getZ() + 0.5);
+        zombie.getLookControl().setLookAt(targetBlock.getX() + 0.5, targetBlock.getY(), targetBlock.getZ() + 0.5);
 
         // Mining animation and progress
-        zombie.swingHand(Hand.MAIN_HAND);
-        zombie.swingHand(Hand.OFF_HAND);
+        zombie.swing(InteractionHand.MAIN_HAND);
+        zombie.swing(InteractionHand.OFF_HAND);
         miningTicks++;
 
         float strength = getBlockStrength(world, targetBlock);
@@ -1116,11 +1113,11 @@ public class BlockBreakGoal extends Goal {
 
         // Update block breaking progress
         int progress = (int) (breakProgress * 10.0F);
-        world.setBlockBreakingInfo(zombie.getId(), targetBlock, progress);
+        world.destroyBlockProgress(zombie.getId(), targetBlock, progress);
 
-        if (world instanceof ServerWorld serverWorld) {
-            serverWorld.spawnParticles(
-                    new BlockStateParticleEffect(ParticleTypes.BLOCK, world.getBlockState(targetBlock)),
+        if (world instanceof ServerLevel serverWorld) {
+            serverWorld.sendParticles(
+                    new BlockParticleOption(ParticleTypes.BLOCK, world.getBlockState(targetBlock)),
                     targetBlock.getX() + 0.5, targetBlock.getY() + 0.5, targetBlock.getZ() + 0.5,
                     20, // more particles
                     0.25, 0.25, 0.25, // spread
@@ -1131,9 +1128,9 @@ public class BlockBreakGoal extends Goal {
 
         if (miningTicks % 2 == 0) {
             BlockState blockState = world.getBlockState(targetBlock);
-            BlockSoundGroup soundGroup = blockState.getSoundGroup();
+            SoundType soundGroup = blockState.getSoundType();
             float volume = 0.7F;
-            float pitch = 0.4F + world.random.nextFloat() * 0.4F;
+            float pitch = 0.4F + world.getRandom().nextFloat() * 0.4F;
 
             world.playSound(
                     null,
@@ -1141,7 +1138,7 @@ public class BlockBreakGoal extends Goal {
                     targetBlock.getY() + 0.5,
                     targetBlock.getZ() + 0.5,
                     soundGroup.getHitSound(),
-                    SoundCategory.PLAYERS,
+                    SoundSource.PLAYERS,
                     volume,
                     pitch
             );
@@ -1156,9 +1153,9 @@ public class BlockBreakGoal extends Goal {
     }
 
 
-    private void spawnTargetBlockParticles(World world) {
-        if (targetBlock != null && world instanceof ServerWorld serverWorld) {
-            serverWorld.spawnParticles(
+    private void spawnTargetBlockParticles(Level world) {
+        if (targetBlock != null && world instanceof ServerLevel serverWorld) {
+            serverWorld.sendParticles(
                     ParticleTypes.HAPPY_VILLAGER,
                     targetBlock.getX() + 0.5, targetBlock.getY() + 0.5, targetBlock.getZ() + 0.5,
                     30, 0.3, 0.3, 0.3, 0.0
@@ -1170,7 +1167,7 @@ public class BlockBreakGoal extends Goal {
         if (blockpos == null) return false;
 
         // Check if block is within range before doing expensive calculations
-        BlockPos zombiePos = zombie.getBlockPos();
+        BlockPos zombiePos = zombie.blockPosition();
         int xDiff = Math.abs(blockpos.getX() - zombiePos.getX());
         int yDiff = Math.abs(blockpos.getY() - zombiePos.getY());
         int zDiff = Math.abs(blockpos.getZ() - zombiePos.getZ());
@@ -1182,9 +1179,9 @@ public class BlockBreakGoal extends Goal {
             return false;
         }
 
-        double zombieCenterX = zombie.getX() + zombie.getWidth() / 2.0;
-        double zombieCenterY = zombie.getY() + zombie.getHeight() / 2.0;
-        double zombieCenterZ = zombie.getZ() + zombie.getWidth() / 2.0;
+        double zombieCenterX = zombie.getX() + zombie.getBbWidth() / 2.0;
+        double zombieCenterY = zombie.getY() + zombie.getBbHeight() / 2.0;
+        double zombieCenterZ = zombie.getZ() + zombie.getBbWidth() / 2.0;
 
         double targetX = blockpos.getX() + 0.5;
         double targetY = blockpos.getY() + 0.5;
@@ -1210,12 +1207,12 @@ public class BlockBreakGoal extends Goal {
         double targetY = targetBlock.getY() + 0.5;
         double targetZ = targetBlock.getZ() + 0.5;
 
-        zombie.getNavigation().startMovingTo(targetX, targetY, targetZ, 1.0);
-        zombie.getLookControl().lookAt(targetX, targetY, targetZ);
+        zombie.getNavigation().moveTo(targetX, targetY, targetZ, 1.0);
+        zombie.getLookControl().setLookAt(targetX, targetY, targetZ);
 
 
         //check if zombie is idle / not moving during pathing to the targetblock
-        if ((zombie.getNavigation().isIdle() || !zombie.getNavigation().isFollowingPath()) && targetBlock != null) {
+        if ((zombie.getNavigation().isDone() || !zombie.getNavigation().isInProgress()) && targetBlock != null) {
             blockFindingIdleTicks++;
         } else {
             blockFindingIdleTicks = Math.max(0, blockFindingIdleTicks - 1);
@@ -1226,35 +1223,35 @@ public class BlockBreakGoal extends Goal {
 
     public void visualizePathToBlock(BlockPos targetBlockPos) {
         if (targetBlockPos != null) {
-            MobNavigation navigation = (MobNavigation) zombie.getNavigation();
-            Path path = navigation.findPathTo(targetBlockPos, 0); // Create path to the target
+            GroundPathNavigation navigation = (GroundPathNavigation) zombie.getNavigation();
+            Path path = navigation.createPath(targetBlockPos, 0); // Create path to the target
 
-            if (path != null && path.getEnd() != null) {
+            if (path != null && path.getEndNode() != null) {
 
-                ServerWorld serverWorld = (ServerWorld) zombie.getEntityWorld();
+                ServerLevel serverWorld = (ServerLevel) zombie.level();
 
 
                 // End node (green) - happy villager particles
-                PathNode endNode = path.getEnd();
+                Node endNode = path.getEndNode();
                 BlockPos endPos = new BlockPos(
-                        (int) endNode.getPos().getX(),
-                        (int) endNode.getPos().getY(),
-                        (int) endNode.getPos().getZ());
-                serverWorld.spawnParticles(
+                        (int) endNode.asVec3().x(),
+                        (int) endNode.asVec3().y(),
+                        (int) endNode.asVec3().z());
+                serverWorld.sendParticles(
                         ParticleTypes.FLAME,
                         endPos.getX() + 0.5, endPos.getY() + 0.5, endPos.getZ() + 0.5,
                         10, 0.2, 0.2, 0.2, 0.0
                 );
 
                 // Path nodes (blue) - soul fire flame particles
-                int nodeCount = path.getLength();
+                int nodeCount = path.getNodeCount();
                 for (int i = 0; i < nodeCount; i++) {
-                    PathNode node = path.getNode(i);
+                    Node node = path.getNode(i);
                     BlockPos nodePos = new BlockPos(
-                            (int) node.getPos().getX(),
-                            (int) node.getPos().getY(),
-                            (int) node.getPos().getZ());
-                    serverWorld.spawnParticles(
+                            (int) node.asVec3().x(),
+                            (int) node.asVec3().y(),
+                            (int) node.asVec3().z());
+                    serverWorld.sendParticles(
                             ParticleTypes.SOUL_FIRE_FLAME,
                             nodePos.getX() + 0.5, nodePos.getY() + 0.5, nodePos.getZ() + 0.5,
                             5, 0.1, 0.1, 0.1, 0.0

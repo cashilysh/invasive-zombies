@@ -1,20 +1,17 @@
 package invasivezombies.goal;
 
 import invasivezombies.config.ModConfig;
-
-
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.ZombieEntity;
-import net.minecraft.entity.ai.goal.Goal;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.passive.VillagerEntity;
-
 import java.util.EnumSet;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.npc.villager.Villager;
+import net.minecraft.world.entity.player.Player;
 
 public class KeepTargetGoal extends Goal {
 
-    private final ZombieEntity zombie;
+    private final Zombie zombie;
     private boolean targetSeen;
     private LivingEntity previousTarget = null;
     private int targetSwitchCooldown = 0;
@@ -26,14 +23,14 @@ public class KeepTargetGoal extends Goal {
     private static final double maxFollowRange = settings.getFollowRange();
 
 
-    public KeepTargetGoal(ZombieEntity zombie) {
+    public KeepTargetGoal(Zombie zombie) {
         this.zombie = zombie;
-        this.setControls(EnumSet.of(Goal.Control.TARGET));
+        this.setFlags(EnumSet.of(Goal.Flag.TARGET));
     }
 
     @Override
-    public boolean canStart() {
-        if (zombie == null || zombie.getEntityWorld() == null) return false;
+    public boolean canUse() {
+        if (zombie == null || zombie.level() == null) return false;
 
 
         validateCurrentTarget();
@@ -48,7 +45,7 @@ public class KeepTargetGoal extends Goal {
         // For visibility tracking (used for extended follow range)
         // Check if we can see any player at all within max follow range
         LivingEntity visiblePlayer = findNearestValidPlayer(maxFollowRange);
-        if (visiblePlayer != null && zombie.canSee(visiblePlayer)) {
+        if (visiblePlayer != null && zombie.hasLineOfSight(visiblePlayer)) {
             targetSeen = true;
         }
 
@@ -71,11 +68,11 @@ public class KeepTargetGoal extends Goal {
                 // Priority 3: If we've seen a target before, extend to the follow range
                 // This is for when targets move outside maxTargetRange but are still within maxFollowRange
                 LivingEntity farPlayer = findNearestValidPlayer(maxFollowRange);
-                if (farPlayer != null && farPlayer.squaredDistanceTo(zombie) > maxTargetRange * maxTargetRange) {
+                if (farPlayer != null && farPlayer.distanceToSqr(zombie) > maxTargetRange * maxTargetRange) {
                     zombie.setTarget(farPlayer);
                 } else if (farPlayer == null) {
                     LivingEntity farVillager = findNearestValidVillager(maxFollowRange);
-                    if (farVillager != null && farVillager.squaredDistanceTo(zombie) > maxTargetRange * maxTargetRange) {
+                    if (farVillager != null && farVillager.distanceToSqr(zombie) > maxTargetRange * maxTargetRange) {
                         zombie.setTarget(farVillager);
                     }
                 }
@@ -89,42 +86,42 @@ public class KeepTargetGoal extends Goal {
         LivingEntity target = zombie.getTarget();
 
         if (target != null) {
-            if (target instanceof PlayerEntity player) {
+            if (target instanceof Player player) {
                 // Clear target if player is now in creative, spectator, or invisible
                 if (player.isCreative() || player.isSpectator() ||
-                        player.hasStatusEffect(StatusEffects.INVISIBILITY)) {
+                        player.hasEffect(MobEffects.INVISIBILITY)) {
                     zombie.setTarget(null);
                     targetSeen = false;
                 }
-            } else if (target instanceof VillagerEntity villager) {
+            } else if (target instanceof Villager villager) {
                 // Clear target if villager is invisible
-                if (villager.hasStatusEffect(StatusEffects.INVISIBILITY)) {
+                if (villager.hasEffect(MobEffects.INVISIBILITY)) {
                     zombie.setTarget(null);
                     targetSeen = false;
                 }
             }
 
             // Check if target is too far away
-            if (zombie.squaredDistanceTo(target) > maxFollowRange * maxFollowRange) {
+            if (zombie.distanceToSqr(target) > maxFollowRange * maxFollowRange) {
                 zombie.setTarget(null);
                 targetSeen = false;
             }
         }
     }
 
-    private PlayerEntity findNearestValidPlayer(double range) {
-        PlayerEntity nearestPlayer = null;
+    private Player findNearestValidPlayer(double range) {
+        Player nearestPlayer = null;
         double closestDistance = Double.MAX_VALUE;
         double rangeSquared = range * range;
 
         // Use getEntitiesByClass for better performance than getPlayers()
-        for (PlayerEntity player : zombie.getEntityWorld().getEntitiesByClass(
-                PlayerEntity.class,
-                zombie.getBoundingBox().expand(range),
+        for (Player player : zombie.level().getEntitiesOfClass(
+                Player.class,
+                zombie.getBoundingBox().inflate(range),
                 player -> player.isAlive() && !player.isSpectator() && !player.isCreative() &&
-                        !player.hasStatusEffect(StatusEffects.INVISIBILITY))) {
+                        !player.hasEffect(MobEffects.INVISIBILITY))) {
 
-            double distance = zombie.squaredDistanceTo(player);
+            double distance = zombie.distanceToSqr(player);
             if (distance <= rangeSquared && distance < closestDistance) {
                 closestDistance = distance;
                 nearestPlayer = player;
@@ -134,18 +131,18 @@ public class KeepTargetGoal extends Goal {
         return nearestPlayer;
     }
 
-    private VillagerEntity findNearestValidVillager(double range) {
-        VillagerEntity nearestVillager = null;
+    private Villager findNearestValidVillager(double range) {
+        Villager nearestVillager = null;
         double closestDistance = Double.MAX_VALUE;
         double rangeSquared = range * range;
 
-        for (VillagerEntity villager : zombie.getEntityWorld().getEntitiesByClass(
-                VillagerEntity.class,
-                zombie.getBoundingBox().expand(range),
+        for (Villager villager : zombie.level().getEntitiesOfClass(
+                Villager.class,
+                zombie.getBoundingBox().inflate(range),
                 villager -> villager.isAlive() &&
-                        !villager.hasStatusEffect(StatusEffects.INVISIBILITY))) {
+                        !villager.hasEffect(MobEffects.INVISIBILITY))) {
 
-            double distance = zombie.squaredDistanceTo(villager);
+            double distance = zombie.distanceToSqr(villager);
             if (distance <= rangeSquared && distance < closestDistance) {
                 closestDistance = distance;
                 nearestVillager = villager;
