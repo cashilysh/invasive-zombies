@@ -51,6 +51,12 @@ Added an "Always Mineable" block list — blocks in this list can be broken rega
 
 2.0.1
 
-Switched to official Mojang mappings
+Migrated to official Mojang mappings
 
-Compiled with Java25
+Compiled with Java 25
+
+KeepTargetGoal: removed TARGET flag so it runs concurrently alongside other active goals, fixing zombies losing track of targets while breaking blocks
+
+Excluded ZombieHorse, Drowned, and Husk from custom AI goals; added passenger entity guard to prevent crashes with mounted zombies
+
+

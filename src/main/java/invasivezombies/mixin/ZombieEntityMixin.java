@@ -8,6 +8,9 @@ import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.MoveThroughVillageGoal;
+import net.minecraft.world.entity.animal.equine.ZombieHorse;
+import net.minecraft.world.entity.monster.zombie.Drowned;
+import net.minecraft.world.entity.monster.zombie.Husk;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.monster.zombie.ZombifiedPiglin;
 import net.minecraft.world.item.ItemStack;
@@ -26,7 +29,13 @@ public abstract class ZombieEntityMixin {
     private void addBlockBreakGoal(CallbackInfo info) {
         Zombie zombie = (Zombie) (Object) this;
 
-        if (zombie instanceof ZombifiedPiglin) {
+
+        //  BlockBreakGoal & KeepTargetGoal EXCLUSIONS:
+
+        if (zombie instanceof ZombifiedPiglin
+                || zombie instanceof ZombieHorse
+                || zombie instanceof Drowned
+                || zombie instanceof Husk) {
             return;
         }
 

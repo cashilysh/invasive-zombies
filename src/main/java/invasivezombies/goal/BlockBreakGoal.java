@@ -133,6 +133,8 @@ public class BlockBreakGoal extends Goal {
             return false;
         }
 
+        if (zombie.isPassenger() || zombie.isVehicle()) return false;
+
 
         if (settings.getBreakBlocksWithToolsOnly()) {
             ItemStack mainHand = zombie.getMainHandItem();
@@ -288,8 +290,6 @@ public class BlockBreakGoal extends Goal {
         if (targetPos == null) {
             return null;
         }
-
-        Vec3 targetPos = target.position(); // Now safe to access
 
         int[] heightRange = getminYmaxYAtEndNode(zombiePos, targetPos);
 
@@ -736,13 +736,19 @@ public class BlockBreakGoal extends Goal {
 
 
     private boolean canPathToBlockAndIsAccessible(BlockPos blockpos) {
-        // Early validation - no change needed
+        // Early validation
         if (zombie == null || zombie.level() == null || blockpos == null) return false;
 
         Level world = zombie.level();
         LivingEntity target = zombie.getTarget();
-        Vec3 targetPos = target.position(); // Now safe to access
 
+        // SAFETY: Check if target exists and is valid before accessing position
+        if (target == null || !target.isAlive()) return false;
+
+        Vec3 targetPos = target.position();
+
+        // SAFETY: Check if target position is valid
+        if (targetPos == null) return false;
 
         // Only now find path (expensive operation)
         Path blockPath = zombie.getNavigation().createPath(blockpos, 0);

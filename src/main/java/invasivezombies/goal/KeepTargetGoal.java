@@ -26,7 +26,12 @@ public class KeepTargetGoal extends Goal {
 
     public KeepTargetGoal(Zombie zombie) {
         this.zombie = zombie;
-        this.setFlags(EnumSet.of(Goal.Flag.TARGET));
+
+
+        // TESTING - disable target flag so this goal can run parallel to other goals and not interfere as much
+
+        // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        //this.setFlags(EnumSet.of(Goal.Flag.TARGET));
     }
 
     @Override
