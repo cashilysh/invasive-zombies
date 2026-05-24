@@ -51,40 +51,36 @@ public abstract class ZombieEntityMixin {
 
     }
 
-    // Configuration variables - adjust these percentages as needed
-    private static final float PICKAXE_CHANCE = 0.60f;
-    private static final float AXE_CHANCE = 0.20f;
-    private static final float SHOVEL_CHANCE = 0.20f;
-
     @Inject(method = "populateDefaultEquipmentSlots", at = @At("TAIL"))
     private void addCustomTools(RandomSource random, DifficultyInstance localDifficulty, CallbackInfo ci) {
+        // Only run if the new feature is enabled
+        if (!settings.getEnableToolChance()) {
+            return;
+        }
+
         Zombie zombie = (Zombie)(Object)this;
 
         // Clear any existing mainhand item
         zombie.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
 
-        // First decide if zombie should get ANY tool
-        float totalChance = PICKAXE_CHANCE + AXE_CHANCE + SHOVEL_CHANCE;
-        if (random.nextFloat() >= totalChance) {
-            return; // No tool
-        }
+        float roll = random.nextFloat() * 100.0f;
+        int pickaxeChance = settings.getPickaxeSpawnChance();
+        int axeChance = settings.getAxeSpawnChance();
+        int shovelChance = settings.getShovelSpawnChance();
 
-        // Now randomly pick which tool type
-        float roll = random.nextFloat() * totalChance;
-
-        if (roll < PICKAXE_CHANCE) {
+        if (roll < pickaxeChance) {
             // Pickaxe
             ItemStack pickaxe = random.nextBoolean() ?
                     new ItemStack(Items.STONE_PICKAXE) :
                     new ItemStack(Items.IRON_PICKAXE);
             zombie.setItemSlot(EquipmentSlot.MAINHAND, pickaxe);
-        } else if (roll < PICKAXE_CHANCE + AXE_CHANCE) {
+        } else if (roll < pickaxeChance + axeChance) {
             // Axe
             ItemStack axe = random.nextBoolean() ?
                     new ItemStack(Items.STONE_AXE) :
                     new ItemStack(Items.IRON_AXE);
             zombie.setItemSlot(EquipmentSlot.MAINHAND, axe);
-        } else {
+        } else if (roll < pickaxeChance + axeChance + shovelChance) {
             // Shovel
             ItemStack shovel = random.nextBoolean() ?
                     new ItemStack(Items.STONE_SHOVEL) :

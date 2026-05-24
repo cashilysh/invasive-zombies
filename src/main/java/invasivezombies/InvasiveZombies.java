@@ -19,6 +19,8 @@ public class InvasiveZombies implements ModInitializer {
     @Override
     public void onInitialize() {
 
+
+        /*
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             if (!FabricLoader.getInstance().isModLoaded("modmenu") &&
                     !FabricLoader.getInstance().isModLoaded("modsettings")) {
@@ -34,7 +36,7 @@ public class InvasiveZombies implements ModInitializer {
                 );
             }
         }
-
+        **/
 
         ServerLevelEvents.LOAD.register((server, world) -> BlockBreakGoal.resetAllMiningStates());
 
@@ -65,7 +67,7 @@ public class InvasiveZombies implements ModInitializer {
 
     public static Identifier id(String path) {
         // Use VersionHelper.CustomIdentifier here to ensure consistency
-        return VersionHelper.CustomIdentifier("invasivezombies"); // Use CustomIdentifier to build the Identifier
+        return VersionHelper.CustomIdentifier("invasivezombies:" + path); // Use CustomIdentifier to build the Identifier
     }
 	
 	

@@ -7,6 +7,7 @@ import com.terraformersmc.modmenu.api.ModMenuApi;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
+import me.shedaniel.clothconfig2.gui.entries.BooleanListEntry;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
@@ -15,6 +16,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ModMenuClient implements ModMenuApi {
 
@@ -34,8 +36,13 @@ public class ModMenuClient implements ModMenuApi {
                 ModConfig.saveSettings();
             });
 
-            ConfigCategory generalCategory = builder.getOrCreateCategory(Component.literal("Blocks"));
             ConfigCategory zombieSettingsCategory = builder.getOrCreateCategory(Component.literal("Zombie"));
+            ConfigCategory standardBlocksCategory = builder.getOrCreateCategory(Component.literal("Standard Mineables"));
+            ConfigCategory toolsCategory = builder.getOrCreateCategory(Component.literal("Tools"));
+            ConfigCategory pickaxeBlocksCategory = builder.getOrCreateCategory(Component.literal("Pickaxe Mineables"));
+            ConfigCategory axeBlocksCategory = builder.getOrCreateCategory(Component.literal("Axe Mineables"));
+            ConfigCategory shovelBlocksCategory = builder.getOrCreateCategory(Component.literal("Shovel Mineables"));
+            ConfigCategory alwaysBlocksCategory = builder.getOrCreateCategory(Component.literal("Always Mineables"));
             ConfigCategory debugSettingsCategory = builder.getOrCreateCategory(Component.literal("Debug"));
             ConfigEntryBuilder entryBuilder = builder.entryBuilder();
 
@@ -62,9 +69,24 @@ public class ModMenuClient implements ModMenuApi {
             }
 
             List<String> currentBlockListForGui = new ArrayList<>(ModConfig.getMineableBlocksInternalList());
+            List<String> currentAlwaysBlockListForGui = new ArrayList<>(ModConfig.getAlwaysMineableBlocksInternalList());
+            List<String> currentPickaxeBlockListForGui = new ArrayList<>(ModConfig.getPickaxeMineableBlocksInternalList());
+            List<String> currentAxeBlockListForGui = new ArrayList<>(ModConfig.getAxeMineableBlocksInternalList());
+            List<String> currentShovelBlockListForGui = new ArrayList<>(ModConfig.getShovelMineableBlocksInternalList());
 
-            generalCategory.addEntry(entryBuilder.startStrList(
-                            Component.literal("Mineable Blocks")
+            ModConfig.ZombieSettings settings = ModConfig.getZombieSettings();
+            ModConfig.ZombieSettings defaults = new ModConfig.ZombieSettings();
+
+            List<Component> mineableBlocksTooltip = new ArrayList<>(tooltipLines);
+
+            BooleanListEntry requireToolsEntry = entryBuilder.startBooleanToggle(Component.literal("Require Tools to Break Blocks"), settings.getBreakBlocksWithToolsOnly())
+                    .setDefaultValue(defaults.getBreakBlocksWithToolsOnly())
+                    .setSaveConsumer(settings::setBreakBlocksWithToolsOnly)
+                    .setTooltip(Component.literal("Zombies need appropriate tools to break blocks.\nDisables the 'Standard Mineables' list."))
+                    .build();
+
+            standardBlocksCategory.addEntry(entryBuilder.startStrList(
+                            Component.literal("Standard Mineable Blocks")
                                     .setStyle(Style.EMPTY.withColor(
                                             !ModConfig.isInitialized || !currentErrorsSnapshot.isEmpty() ? ChatFormatting.RED : ChatFormatting.WHITE)),
                             currentBlockListForGui)
@@ -103,7 +125,7 @@ public class ModMenuClient implements ModMenuApi {
                         }
                         Set<String> seenInGui = new HashSet<>();
                         for (String entry : value) {
-                            if (entry.isEmpty() && value.size() > 1 && value.indexOf(entry) != value.size()-1) {
+                            if (entry.isEmpty() && value.size() > 1 && value.indexOf(entry) != value.size() - 1) {
                                 return Optional.of(Component.literal("Empty entries before the last are invalid.").withStyle(ChatFormatting.RED));
                             }
                             if (!entry.isEmpty() && !seenInGui.add(entry)) {
@@ -115,20 +137,223 @@ public class ModMenuClient implements ModMenuApi {
                                     if (validationError.startsWith("Block does not exist")) { // More specific error
                                         return Optional.of(Component.literal(validationError).withStyle(ChatFormatting.RED));
                                     }
+                                    return Optional.of(Component.literal("Invalid format: " + entry + " (" + validationError + ")").withStyle(ChatFormatting.RED));
+                                }
+                            }
+                        }
+                        return Optional.empty();
+                    })
+                    .setTooltip(mineableBlocksTooltip.toArray(new Component[0]))
+                    .setInsertInFront(true)
+                    .setExpanded(true)
+                    .setRequirement(() -> !requireToolsEntry.getValue())
+                    .build()
+            );
+
+            List<Component> alwaysBlocksTooltip = new ArrayList<>(tooltipLines);
+            alwaysBlocksTooltip.add(Component.literal("Blocks in this list can ALWAYS be broken by zombies, regardless of tool requirements."));
+
+            alwaysBlocksCategory.addEntry(entryBuilder.startStrList(
+                            Component.literal("Always Mineable Blocks")
+                                    .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)),
+                            currentAlwaysBlockListForGui)
+                    .setDefaultValue(ModConfig.loadDefaultAlwaysBlocks())
+                    .setSaveConsumer(newValue -> {
+                        List<String> modConfigAlwaysBlocks = ModConfig.getAlwaysMineableBlocksInternalList();
+                        List<String> modConfigConfigErrors = ModConfig.getConfigErrorsInternalList(); // Share error list
+                        if (!newValue.equals(currentAlwaysBlockListForGui)) {
+                            modConfigAlwaysBlocks.clear();
+                            // Don't clear errors here as we might have errors from the other list? 
+                            // Actually existing logic clears errors. Let's stick to that pattern for now or better, don't clear if other list failed?
+                            // But keeping it simple: existing pattern.
+                            
+                            Set<String> seen = new HashSet<>();
+                            for (String block : newValue) {
+                                if (modConfigAlwaysBlocks.size() >= ModConfig.MAX_BLOCKS) {
+                                    modConfigConfigErrors.add("Max block limit (" + ModConfig.MAX_BLOCKS + ") reached for always list. Some entries not added.");
+                                    break;
+                                }
+                                if (!seen.add(block)) {
+                                    modConfigConfigErrors.add("Duplicate always block removed: " + block);
+                                    continue;
+                                }
+                                String validationError = ModConfig.validateBlockId(block);
+                                if (validationError == null) {
+                                    modConfigAlwaysBlocks.add(block);
+                                } else {
+                                    modConfigConfigErrors.add("Invalid always block ID: " + block + " (" + validationError + ")");
+                                }
+                            }
+                            ModConfig.saveAlwaysBlockConfig();
+                        }
+                    })
+                    .setErrorSupplier(value -> {
+                         // Similar validation logic
+                        if (value.size() > ModConfig.MAX_BLOCKS) {
+                            return Optional.of(Component.literal("Too many blocks. Limit: " + ModConfig.MAX_BLOCKS).withStyle(ChatFormatting.RED));
+                        }
+                        Set<String> seenInGui = new HashSet<>();
+                        for (String entry : value) {
+                            if (entry.isEmpty() && value.size() > 1 && value.indexOf(entry) != value.size()-1) {
+                                return Optional.of(Component.literal("Empty entries before the last are invalid.").withStyle(ChatFormatting.RED));
+                            }
+                            if (!entry.isEmpty() && !seenInGui.add(entry)) {
+                                return Optional.of(Component.literal("Duplicate entry: " + entry).withStyle(ChatFormatting.GOLD));
+                            }
+                            if (!entry.isEmpty()) {
+                                String validationError = ModConfig.validateBlockId(entry);
+                                if (validationError != null) {
+                                    if (validationError.startsWith("Block does not exist")) {
+                                        return Optional.of(Component.literal(validationError).withStyle(ChatFormatting.RED));
+                                    }
                                     return Optional.of(Component.literal("Invalid format: " + entry + " ("+validationError+")").withStyle(ChatFormatting.RED));
                                 }
                             }
                         }
                         return Optional.empty();
                     })
-                    .setTooltip(tooltipLines.toArray(new Component[0]))
+                    .setTooltip(alwaysBlocksTooltip.toArray(new Component[0]))
                     .setInsertInFront(true)
                     .setExpanded(true)
+                    .setRequirement(requireToolsEntry::getValue)
                     .build()
             );
 
-            ModConfig.ZombieSettings settings = ModConfig.getZombieSettings();
-            ModConfig.ZombieSettings defaults = new ModConfig.ZombieSettings();
+            List<Component> pickaxeBlocksTooltip = new ArrayList<>(tooltipLines);
+            pickaxeBlocksTooltip.add(Component.literal("Blocks that can be broken by zombies holding a Pickaxe (if 'Break Blocks With Tools Only' is enabled)."));
+
+            pickaxeBlocksCategory.addEntry(entryBuilder.startStrList(
+                            Component.literal("Pickaxe Mineable Blocks")
+                                    .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)),
+                            currentPickaxeBlockListForGui)
+                    .setDefaultValue(ModConfig.loadDefaultToolBlocks("/data/pickaxe_mineable.json"))
+                    .setSaveConsumer(newValue -> {
+                        List<String> targetList = ModConfig.getPickaxeMineableBlocksInternalList();
+                        List<String> errors = ModConfig.getConfigErrorsInternalList();
+                        if (!newValue.equals(currentPickaxeBlockListForGui)) {
+                            targetList.clear();
+                            Set<String> seen = new HashSet<>();
+                            for (String block : newValue) {
+                                if (targetList.size() >= ModConfig.MAX_BLOCKS) {
+                                    errors.add("Max block limit reached for pickaxe list.");
+                                    break;
+                                }
+                                if (!seen.add(block)) continue;
+                                String validationError = ModConfig.validateBlockId(block);
+                                if (validationError == null) targetList.add(block);
+                                else errors.add("Invalid pickaxe block ID: " + block + " (" + validationError + ")");
+                            }
+                            ModConfig.savePickaxeConfig();
+                        }
+                    })
+                    .setErrorSupplier(value -> {
+                        if (value.size() > ModConfig.MAX_BLOCKS) return Optional.of(Component.literal("Too many blocks.").withStyle(ChatFormatting.RED));
+                        for (String entry : value) {
+                            if (!entry.isEmpty()) {
+                                String err = ModConfig.validateBlockId(entry);
+                                if (err != null) return Optional.of(Component.literal(err).withStyle(ChatFormatting.RED));
+                            }
+                        }
+                        return Optional.empty();
+                    })
+                    .setTooltip(pickaxeBlocksTooltip.toArray(new Component[0]))
+                    .setInsertInFront(true)
+                    .setExpanded(true)
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build()
+            );
+
+            List<Component> axeBlocksTooltip = new ArrayList<>(tooltipLines);
+            axeBlocksTooltip.add(Component.literal("Blocks that can be broken by zombies holding an Axe (if 'Break Blocks With Tools Only' is enabled)."));
+
+            axeBlocksCategory.addEntry(entryBuilder.startStrList(
+                            Component.literal("Axe Mineable Blocks")
+                                    .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)),
+                            currentAxeBlockListForGui)
+                    .setDefaultValue(ModConfig.loadDefaultToolBlocks("/data/axe_mineable.json"))
+                    .setSaveConsumer(newValue -> {
+                        List<String> targetList = ModConfig.getAxeMineableBlocksInternalList();
+                        List<String> errors = ModConfig.getConfigErrorsInternalList();
+                        if (!newValue.equals(currentAxeBlockListForGui)) {
+                            targetList.clear();
+                            Set<String> seen = new HashSet<>();
+                            for (String block : newValue) {
+                                if (targetList.size() >= ModConfig.MAX_BLOCKS) {
+                                    errors.add("Max block limit reached for axe list.");
+                                    break;
+                                }
+                                if (!seen.add(block)) continue;
+                                String validationError = ModConfig.validateBlockId(block);
+                                if (validationError == null) targetList.add(block);
+                                else errors.add("Invalid axe block ID: " + block + " (" + validationError + ")");
+                            }
+                            ModConfig.saveAxeConfig();
+                        }
+                    })
+                    .setErrorSupplier(value -> {
+                        if (value.size() > ModConfig.MAX_BLOCKS) return Optional.of(Component.literal("Too many blocks.").withStyle(ChatFormatting.RED));
+                        for (String entry : value) {
+                            if (!entry.isEmpty()) {
+                                String err = ModConfig.validateBlockId(entry);
+                                if (err != null) return Optional.of(Component.literal(err).withStyle(ChatFormatting.RED));
+                            }
+                        }
+                        return Optional.empty();
+                    })
+                    .setTooltip(axeBlocksTooltip.toArray(new Component[0]))
+                    .setInsertInFront(true)
+                    .setExpanded(true)
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build()
+            );
+
+            List<Component> shovelBlocksTooltip = new ArrayList<>(tooltipLines);
+            shovelBlocksTooltip.add(Component.literal("Blocks that can be broken by zombies holding a Shovel (if 'Break Blocks With Tools Only' is enabled)."));
+
+            shovelBlocksCategory.addEntry(entryBuilder.startStrList(
+                            Component.literal("Shovel Mineable Blocks")
+                                    .setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)),
+                            currentShovelBlockListForGui)
+                    .setDefaultValue(ModConfig.loadDefaultToolBlocks("/data/shovel_mineable.json"))
+                    .setSaveConsumer(newValue -> {
+                        List<String> targetList = ModConfig.getShovelMineableBlocksInternalList();
+                        List<String> errors = ModConfig.getConfigErrorsInternalList();
+                        if (!newValue.equals(currentShovelBlockListForGui)) {
+                            targetList.clear();
+                            Set<String> seen = new HashSet<>();
+                            for (String block : newValue) {
+                                if (targetList.size() >= ModConfig.MAX_BLOCKS) {
+                                    errors.add("Max block limit reached for shovel list.");
+                                    break;
+                                }
+                                if (!seen.add(block)) continue;
+                                String validationError = ModConfig.validateBlockId(block);
+                                if (validationError == null) targetList.add(block);
+                                else errors.add("Invalid shovel block ID: " + block + " (" + validationError + ")");
+                            }
+                            ModConfig.saveShovelConfig();
+                        }
+                    })
+                    .setErrorSupplier(value -> {
+                        if (value.size() > ModConfig.MAX_BLOCKS) return Optional.of(Component.literal("Too many blocks.").withStyle(ChatFormatting.RED));
+                        for (String entry : value) {
+                            if (!entry.isEmpty()) {
+                                String err = ModConfig.validateBlockId(entry);
+                                if (err != null) return Optional.of(Component.literal(err).withStyle(ChatFormatting.RED));
+                            }
+                        }
+                        return Optional.empty();
+                    })
+                    .setTooltip(shovelBlocksTooltip.toArray(new Component[0]))
+                    .setInsertInFront(true)
+                    .setExpanded(true)
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build()
+            );
+
+            AtomicInteger livePickaxe = new AtomicInteger(settings.getPickaxeSpawnChance());
+            AtomicInteger liveAxe = new AtomicInteger(settings.getAxeSpawnChance());
+            AtomicInteger liveShovel = new AtomicInteger(settings.getShovelSpawnChance());
 
             zombieSettingsCategory.addEntry(
                     entryBuilder.startDoubleField(Component.literal("Follow Range"), settings.getFollowRange())
@@ -152,18 +377,80 @@ public class ModMenuClient implements ModMenuApi {
                             .build());
 
             zombieSettingsCategory.addEntry(
-                    entryBuilder.startIntField(Component.literal("Zombie Lock-Target Range"), settings.getTargetRange())
+                    entryBuilder.startIntField(Component.literal("X-Ray Target Range"), settings.getTargetRange())
                             .setDefaultValue(defaults.getTargetRange()).setMin(1).setMax(100)
                             .setSaveConsumer(settings::setTargetRange)
-                            .setTooltip(Component.literal("In what radius zombies will keep their target, even without line-of-sight (X-Ray vision)"))
+                            .setTooltip(Component.literal("Radius in which zombies maintain target lock without line-of-sight."))
                             .build());
 
             zombieSettingsCategory.addEntry(
-                    entryBuilder.startBooleanToggle(Component.literal("Enable Baby Zombies Block Breaking"), settings.getBabyZombiesEnabled())
+                    entryBuilder.startBooleanToggle(Component.literal("Baby Zombies Can Break Blocks"), settings.getBabyZombiesEnabled())
                             .setDefaultValue(defaults.getBabyZombiesEnabled())
                             .setSaveConsumer(settings::setBabyZombiesEnabled)
                             .setTooltip(Component.literal("Toggle whether baby zombies should be able to break blocks"))
                             .build());
+
+            toolsCategory.addEntry(requireToolsEntry);
+
+            toolsCategory.addEntry(
+                    entryBuilder.startBooleanToggle(Component.literal("Enable Bypass List"), settings.getEnableAlwaysBreakableBlockList())
+                            .setDefaultValue(defaults.getEnableAlwaysBreakableBlockList())
+                            .setSaveConsumer(settings::setEnableAlwaysBreakableBlockList)
+                            .setTooltip(Component.literal("Allows zombies to break blocks in 'Always Mineables' list even without tools."))
+                            .setRequirement(requireToolsEntry::getValue)
+                            .build());
+
+            var toolSpawningGroup = entryBuilder.startSubCategory(Component.literal("Tool Spawning Settings"));
+            toolSpawningGroup.add(entryBuilder.startBooleanToggle(Component.literal("Enable Tool Spawning"), settings.getEnableToolChance())
+                    .setDefaultValue(defaults.getEnableToolChance())
+                    .setSaveConsumer(settings::setEnableToolChance)
+                    .setTooltip(Component.literal("Zombies have a chance to spawn with mining tools (Pickaxe, Axe, Shovel)."))
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build());
+            toolSpawningGroup.add(entryBuilder.startIntSlider(Component.literal("Pickaxe Spawn Chance"), settings.getPickaxeSpawnChance(), 0, 100)
+                    .setDefaultValue(defaults.getPickaxeSpawnChance())
+                    .setSaveConsumer(settings::setPickaxeSpawnChance)
+                    .setErrorSupplier(value -> {
+                        livePickaxe.set(value);
+                        if (livePickaxe.get() + liveAxe.get() + liveShovel.get() > 100) {
+                            return Optional.of(Component.literal("Total tool chance cannot exceed 100%").withStyle(ChatFormatting.RED));
+                        }
+                        return Optional.empty();
+                    })
+                    .setTextGetter(value -> Component.literal(value + "%"))
+                    .setTooltip(Component.literal("Chance for a zombie to spawn with a Pickaxe.\nRequires 'Enable Tool Spawning'.\nExample: 30% means 30% of ALL spawned zombies get a pickaxe."))
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build());
+            toolSpawningGroup.add(entryBuilder.startIntSlider(Component.literal("Axe Spawn Chance"), settings.getAxeSpawnChance(), 0, 100)
+                    .setDefaultValue(defaults.getAxeSpawnChance())
+                    .setSaveConsumer(settings::setAxeSpawnChance)
+                    .setErrorSupplier(value -> {
+                        liveAxe.set(value);
+                        if (livePickaxe.get() + liveAxe.get() + liveShovel.get() > 100) {
+                            return Optional.of(Component.literal("Total tool chance cannot exceed 100%").withStyle(ChatFormatting.RED));
+                        }
+                        return Optional.empty();
+                    })
+                    .setTextGetter(value -> Component.literal(value + "%"))
+                    .setTooltip(Component.literal("Chance for a zombie to spawn with an Axe.\nRequires 'Enable Tool Spawning'.\nExample: 20% means 20% of ALL spawned zombies get an axe."))
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build());
+            toolSpawningGroup.add(entryBuilder.startIntSlider(Component.literal("Shovel Spawn Chance"), settings.getShovelSpawnChance(), 0, 100)
+                    .setDefaultValue(defaults.getShovelSpawnChance())
+                    .setSaveConsumer(settings::setShovelSpawnChance)
+                    .setErrorSupplier(value -> {
+                        liveShovel.set(value);
+                        if (livePickaxe.get() + liveAxe.get() + liveShovel.get() > 100) {
+                            return Optional.of(Component.literal("Total tool chance cannot exceed 100%").withStyle(ChatFormatting.RED));
+                        }
+                        return Optional.empty();
+                    })
+                    .setTextGetter(value -> Component.literal(value + "%"))
+                    .setTooltip(Component.literal("Chance for a zombie to spawn with a Shovel.\nRequires 'Enable Tool Spawning'.\nExample: 10% means 10% of ALL spawned zombies get a shovel."))
+                    .setRequirement(requireToolsEntry::getValue)
+                    .build());
+            toolSpawningGroup.setExpanded(true);
+            toolsCategory.addEntry(toolSpawningGroup.build());
 
             debugSettingsCategory.addEntry(
                     entryBuilder.startBooleanToggle(Component.literal("Enable TargetBlock Particles"), settings.getTargetBlockParticlesEnabled())

@@ -7,6 +7,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,6 +16,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
@@ -22,6 +24,9 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.ai.goal.GoalSelector;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.item.AxeItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ShovelItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -72,12 +77,16 @@ public class BlockBreakGoal extends Goal {
     private static final int MAX_IDLE_TICKS_DURING_BLOCK_FINDING = 20;
 
 
-    private static final Set<BlockPos> currentlyMining = Collections.newSetFromMap(new ConcurrentHashMap<>(MAX_MINING_POSITIONS));
+    private static final Set<GlobalPos> currentlyMining = Collections.newSetFromMap(new ConcurrentHashMap<>(MAX_MINING_POSITIONS));
 
     private static final Map<Zombie, BlockBreakGoal> goalMap = new ConcurrentHashMap<>();
     private static final Map<String, TagKey<Block>> tagCache = new ConcurrentHashMap<>();
 
     private static volatile Set<String> breakableBlocks;
+    private static volatile Set<String> alwaysBreakableBlocks;
+    private static volatile Set<String> pickaxeBreakableBlocks;
+    private static volatile Set<String> axeBreakableBlocks;
+    private static volatile Set<String> shovelBreakableBlocks;
     private static final Object INIT_LOCK = new Object();
 
 
@@ -93,6 +102,18 @@ public class BlockBreakGoal extends Goal {
             if (breakableBlocks == null) {
                 breakableBlocks = ModConfig.getMineableBlocks();
             }
+            if (alwaysBreakableBlocks == null) {
+                alwaysBreakableBlocks = ModConfig.getAlwaysMineableBlocks();
+            }
+            if (pickaxeBreakableBlocks == null) {
+                pickaxeBreakableBlocks = ModConfig.getPickaxeMineableBlocks();
+            }
+            if (axeBreakableBlocks == null) {
+                axeBreakableBlocks = ModConfig.getAxeMineableBlocks();
+            }
+            if (shovelBreakableBlocks == null) {
+                shovelBreakableBlocks = ModConfig.getShovelMineableBlocks();
+            }
         }
     }
 
@@ -100,8 +121,20 @@ public class BlockBreakGoal extends Goal {
         currentlyMining.clear();
     }
 
+    private boolean isGlobalPosMined(Level world, BlockPos pos) {
+        return currentlyMining.contains(GlobalPos.of(world.dimension(), pos));
+    }
+
     @Override
     public boolean canUse() {
+        if (settings.getBreakBlocksWithToolsOnly()) {
+            ItemStack mainHand = zombie.getMainHandItem();
+            boolean hasTool = mainHand.is(ItemTags.PICKAXES) ||
+                    mainHand.getItem() instanceof AxeItem ||
+                    mainHand.getItem() instanceof ShovelItem;
+            if (!hasTool) return false;
+        }
+
         if (debug && (prevfailedBlockFindings < failedBlockFindings)) {
             System.out.println("canStart() FBF: " + failedBlockFindings);
             prevfailedBlockFindings = failedBlockFindings;
@@ -132,9 +165,10 @@ public class BlockBreakGoal extends Goal {
         if (path != null && !path.canReach()) {
             BlockPos blockToBreak = findBlockToBreak();
             // Only select this block if it's valid and not being mined by another zombie
-            if (blockToBreak != null && !currentlyMining.contains(blockToBreak)) {
+            GlobalPos globalPos = blockToBreak != null ? GlobalPos.of(zombie.level().dimension(), blockToBreak) : null;
+            if (blockToBreak != null && !currentlyMining.contains(globalPos)) {
                 targetBlock = blockToBreak;
-                currentlyMining.add(targetBlock);
+                currentlyMining.add(globalPos);
                 miningTicks = 0;
                 breakProgress = 0;
                 blockFindingIdleTicks = 0;
@@ -295,9 +329,9 @@ public class BlockBreakGoal extends Goal {
 
                 BlockState blockState = world.getBlockState(checkPos);
                 if (!blockState.isAir()) {
-                    if (isBreakableBlock(world, checkPos)) {
+                    if (isBreakableBlock(world, checkPos, zombie)) {
                         if (isBlockAccessibleFromDirection(world, checkPos, zombieBlockPos)) {
-                            if (!currentlyMining.contains(checkPos)) {
+                            if (!isGlobalPosMined(world, checkPos)) {
                                 directPathBlocks.add(checkPos);
                             }
                         }
@@ -309,7 +343,7 @@ public class BlockBreakGoal extends Goal {
         // Check if any direct path block is available
         if (!directPathBlocks.isEmpty()) {
             BlockPos pos = directPathBlocks.get(new Random().nextInt(directPathBlocks.size()));
-            if (!currentlyMining.contains(pos)) {
+            if (!isGlobalPosMined(world, pos)) {
                 failedBlockFindings = 0;
                 if (blockdebug) System.out.println("Direct (random) block between zombie and target found!");
                 return pos;
@@ -351,8 +385,8 @@ public class BlockBreakGoal extends Goal {
                     BlockState blockState = world.getBlockState(adjacentPos);
 
                     if (!blockState.isAir()) {
-                        if (isBreakableBlock(world, adjacentPos)) {
-                            if (!currentlyMining.contains(adjacentPos)) {
+                        if (isBreakableBlock(world, adjacentPos, zombie)) {
+                            if (!isGlobalPosMined(world, adjacentPos)) {
                                 if (isBlockAccessibleFromDirection(world, adjacentPos, zombieBlockPos)) {
                                     failedBlockFindings = 0;
                                     if (blockdebug)
@@ -411,8 +445,8 @@ public class BlockBreakGoal extends Goal {
 
                     // Filter out air blocks and only check breakable ones
                     if (!blockState.isAir()) {
-                        if (isBreakableBlock(world, checkPos)) {
-                            if (!currentlyMining.contains(checkPos)) {
+                        if (isBreakableBlock(world, checkPos, zombie)) {
+                            if (!isGlobalPosMined(world, checkPos)) {
                                 if (isBlockAccessibleFromDirection(world, checkPos, endNodeBlockPos)) {
                                     failedBlockFindings = 0;
                                     if (blockdebug)
@@ -450,7 +484,7 @@ public class BlockBreakGoal extends Goal {
                         BlockState state = world.getBlockState(doorPos);
 
                         if (!state.isAir()) {
-                            if (state.is(BlockTags.DOORS) && isBreakableBlock(world, doorPos)) {
+                            if (state.is(BlockTags.DOORS) && isBreakableBlock(world, doorPos, zombie)) {
 
                                 if (canPathToBlockAndIsAccessible(doorPos)) {
                                     doorBlocks.add(doorPos);
@@ -463,7 +497,7 @@ public class BlockBreakGoal extends Goal {
 
             // Try each door in sequence until finding one that's not being mined
             for (BlockPos doorPos : doorBlocks) {
-                if (!currentlyMining.contains(doorPos)) {
+                if (!isGlobalPosMined(world, doorPos)) {
                     failedBlockFindings = 0;
                     if (blockdebug) System.out.println("Door Block found!");
                     return doorPos;
@@ -490,9 +524,9 @@ public class BlockBreakGoal extends Goal {
                         zombieBlockPos.getZ() + facing.getStepZ() * dist);
                 BlockState blockState = world.getBlockState(checkPos);
                 if (!blockState.isAir()) {
-                    if (isBreakableBlock(world, checkPos)) {
+                    if (isBreakableBlock(world, checkPos, zombie)) {
                         if (isBlockAccessibleFromDirection(world, checkPos, zombieBlockPos)) {
-                            if (!currentlyMining.contains(checkPos)) {
+                            if (!isGlobalPosMined(world, checkPos)) {
 
                                 facingBlocks.add(checkPos);
                             }
@@ -505,7 +539,7 @@ public class BlockBreakGoal extends Goal {
         // First try main blocks
         for (
                 BlockPos pos : facingBlocks) {
-            if (!currentlyMining.contains(pos)) {
+            if (!isGlobalPosMined(world, pos)) {
                 failedBlockFindings = 0;
                 if (blockdebug) System.out.println("Facing direction block found!");
                 return pos;
@@ -528,8 +562,8 @@ public class BlockBreakGoal extends Goal {
 
                     BlockState blockState = world.getBlockState(adjacentPos);
                     if (!blockState.isAir()) {
-                        if (isBreakableBlock(world, adjacentPos)) {
-                            if (!currentlyMining.contains(adjacentPos)) {
+                        if (isBreakableBlock(world, adjacentPos, zombie)) {
+                            if (!isGlobalPosMined(world, adjacentPos)) {
                                 if (isBlockAccessibleFromDirection(world, adjacentPos, zombieBlockPos)) {
                                     failedBlockFindings = 0;
                                     if (blockdebug) System.out.println("Facing direction adjacent block found!");
@@ -623,8 +657,8 @@ public class BlockBreakGoal extends Goal {
 
                         if (!blockState.isAir()) {
                             if (!blockState.is(Blocks.GRASS_BLOCK)) {
-                                if (!currentlyMining.contains(blockPos)) {
-                                    if (isBreakableBlock(world, blockPos)) {
+                                if (!isGlobalPosMined(world, blockPos)) {
+                                    if (isBreakableBlock(world, blockPos, zombie)) {
                                         if (canPathToBlockAndIsAccessible(blockPos)) {
                                             potentialCandidates.add(new AbstractMap.SimpleEntry<>(blockPos, distanceSquared));
                                         }
@@ -734,8 +768,92 @@ public class BlockBreakGoal extends Goal {
     }
 
 
-    public static boolean isBreakableBlock(Level world, BlockPos pos) {
+    public static boolean isBreakableBlock(Level world, BlockPos pos, Zombie zombie) {
         if (world == null || pos == null) {
+            return false;
+        }
+
+        try {
+            // Priority 0: Always Breakable Blocks (Bypass tool check)
+            if (settings.getEnableAlwaysBreakableBlockList()) {
+                BlockState state = world.getBlockState(pos);
+                Block block = state.getBlock();
+                if (!state.isAir() && state.getDestroySpeed(world, pos) >= 0) {
+                    Identifier blockId = BuiltInRegistries.BLOCK.getKey(block);
+                    
+                    // Direct ID check
+                    for (String entry : alwaysBreakableBlocks) {
+                        Identifier entryId = VersionHelper.CustomIdentifier(entry);
+                        if (!entry.startsWith("#") && entryId != null && entryId.equals(blockId)) {
+                            return true;
+                        }
+                    }
+                    // Tag check
+                    for (String entry : alwaysBreakableBlocks) {
+                        if (entry.startsWith("#")) {
+                            String tagPath = entry.substring(1);
+                            Identifier tagId = VersionHelper.CustomIdentifier(tagPath);
+                            if (tagId != null) {
+                                TagKey<Block> tagKey = tagCache.computeIfAbsent(tagPath,
+                                        path -> TagKey.create(Registries.BLOCK, tagId));
+                                if (block.defaultBlockState().is(tagKey)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Error checking always breakable block at {}: {}", pos, e.getMessage());
+        }
+
+        if (settings.getBreakBlocksWithToolsOnly()) {
+            if (zombie == null) return false;
+            ItemStack stack = zombie.getMainHandItem();
+            BlockState state = world.getBlockState(pos);
+            Block block = state.getBlock();
+            Identifier blockId = BuiltInRegistries.BLOCK.getKey(block);
+
+            Set<String> targetList = null;
+
+            if (stack.is(ItemTags.PICKAXES)) {
+                targetList = pickaxeBreakableBlocks;
+            } else if (stack.getItem() instanceof AxeItem) {
+                targetList = axeBreakableBlocks;
+            } else if (stack.getItem() instanceof ShovelItem) {
+                targetList = shovelBreakableBlocks;
+            }
+
+            if (targetList != null) {
+                // Check specific tool list
+                for (String entry : targetList) {
+                    Identifier entryId = VersionHelper.CustomIdentifier(entry);
+                    if (!entry.startsWith("#") && entryId != null && entryId.equals(blockId)) {
+                        return true;
+                    }
+                }
+                for (String entry : targetList) {
+                    if (entry.startsWith("#")) {
+                        String tagPath = entry.substring(1);
+                        Identifier tagId = VersionHelper.CustomIdentifier(tagPath);
+                        if (tagId != null) {
+                            TagKey<Block> tagKey = tagCache.computeIfAbsent(tagPath,
+                                    path -> TagKey.create(Registries.BLOCK, tagId));
+                            if (block.defaultBlockState().is(tagKey)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // If tool didn't match specific list, or no tool, check always breakable list again (explicitly for clarity, though Priority 0 handles it if enabled)
+            // Wait, Priority 0 handled it IF enabled.
+            // If BreakBlocksWithToolsOnly is ON, we only break if tool matches OR always list matches.
+            // Priority 0 already returned true if always list matches.
+            // So here we only care if the tool allows breaking.
+            
             return false;
         }
 
@@ -751,8 +869,9 @@ public class BlockBreakGoal extends Goal {
 
             // Direct ID check first (faster)
             for (String entry : breakableBlocks) {
+                Identifier entryId = VersionHelper.CustomIdentifier(entry);
                 if (!entry.startsWith("#") &&
-                        VersionHelper.CustomIdentifier(entry).equals(blockId)) {
+                        entryId != null && entryId.equals(blockId)) {
                     return true;
                 }
             }
@@ -761,10 +880,13 @@ public class BlockBreakGoal extends Goal {
             for (String entry : breakableBlocks) {
                 if (entry.startsWith("#")) {
                     String tagPath = entry.substring(1);
-                    TagKey<Block> tagKey = tagCache.computeIfAbsent(tagPath,
-                            path -> TagKey.create(Registries.BLOCK, VersionHelper.CustomIdentifier(path)));
-                    if (block.defaultBlockState().is(tagKey)) {
-                        return true;
+                    Identifier tagId = VersionHelper.CustomIdentifier(tagPath);
+                    if (tagId != null) {
+                        TagKey<Block> tagKey = tagCache.computeIfAbsent(tagPath,
+                                path -> TagKey.create(Registries.BLOCK, tagId));
+                        if (block.defaultBlockState().is(tagKey)) {
+                            return true;
+                        }
                     }
                 }
             }
@@ -798,7 +920,7 @@ public class BlockBreakGoal extends Goal {
 
         if (world != null && targetBlock != null && zombie != null) {
             world.destroyBlockProgress(zombie.getId(), targetBlock, -1);
-            currentlyMining.remove(targetBlock);
+            currentlyMining.remove(GlobalPos.of(world.dimension(), targetBlock));
         }
         targetBlock = null;
         breakProgress = 0;
@@ -812,7 +934,7 @@ public class BlockBreakGoal extends Goal {
             Level world = zombie.level();
             if (world != null && goal.targetBlock != null) {
                 world.destroyBlockProgress(zombie.getId(), goal.targetBlock, -1);
-                currentlyMining.remove(goal.targetBlock);
+                currentlyMining.remove(GlobalPos.of(world.dimension(), goal.targetBlock));
             }
             goal.targetBlock = null;
             goal.breakProgress = 0;
@@ -978,7 +1100,7 @@ public class BlockBreakGoal extends Goal {
         zombie.level().destroyBlock(targetBlock, true);
         zombie.level().destroyBlockProgress(zombie.getId(), targetBlock, -1);
 
-        currentlyMining.remove(targetBlock);
+        currentlyMining.remove(GlobalPos.of(zombie.level().dimension(), targetBlock));
         targetBlock = null;
 
         breakProgress = 0;
@@ -1009,7 +1131,7 @@ public class BlockBreakGoal extends Goal {
             targetBlock = findBlockToBreak();
 
             if (targetBlock != null) {
-                currentlyMining.add(targetBlock);
+                currentlyMining.add(GlobalPos.of(world.dimension(), targetBlock));
                 miningTicks = 0;
                 breakProgress = 0;
                 blockFindingIdleTicks = 0;
@@ -1041,7 +1163,7 @@ public class BlockBreakGoal extends Goal {
         //select NEW block if general pathfinding does take too long or zombie is idle too long during block pathing
         if ((blockFindingIdleTicks > MAX_IDLE_TICKS_DURING_BLOCK_FINDING) && targetBlock != null) {
 
-            currentlyMining.remove(targetBlock);
+            currentlyMining.remove(GlobalPos.of(world.dimension(), targetBlock));
             targetBlock = null;
 
             if (debug) System.out.println("Zombie Idle -> select new block");
@@ -1049,7 +1171,7 @@ public class BlockBreakGoal extends Goal {
             targetBlock = findBlockToBreak();
 
             if (targetBlock != null) {
-                currentlyMining.add(targetBlock);
+                currentlyMining.add(GlobalPos.of(world.dimension(), targetBlock));
                 miningTicks = 0;
                 breakProgress = 0;
                 blockFindingIdleTicks = 0;

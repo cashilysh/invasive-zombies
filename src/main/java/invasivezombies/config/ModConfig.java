@@ -26,13 +26,26 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 public class ModConfig {
     public static final Logger LOGGER = LoggerFactory.getLogger("invasivezombies");
 
-    private static final String MODIFIABLE_BLOCK_CONFIG_FILE = "invasivezombies/mineable.json";
-    private static final String INTERNAL_BLOCK_CONFIG_FILE = "/data/mineable.json"; // From JAR
+    private static final String MODIFIABLE_BLOCK_CONFIG_FILE = "invasivezombies/standard_mineable.json";
+    private static final String INTERNAL_BLOCK_CONFIG_FILE = "/data/standard_mineable.json"; // From JAR
+
+    private static final String MODIFIABLE_ALWAYS_BLOCK_CONFIG_FILE = "invasivezombies/always_mineable.json";
+    private static final String INTERNAL_ALWAYS_BLOCK_CONFIG_FILE = "/data/always_mineable.json"; // From JAR
+
+    private static final String MODIFIABLE_PICKAXE_BLOCK_CONFIG_FILE = "invasivezombies/pickaxe_mineable.json";
+    private static final String INTERNAL_PICKAXE_BLOCK_CONFIG_FILE = "/data/pickaxe_mineable.json";
+
+    private static final String MODIFIABLE_AXE_BLOCK_CONFIG_FILE = "invasivezombies/axe_mineable.json";
+    private static final String INTERNAL_AXE_BLOCK_CONFIG_FILE = "/data/axe_mineable.json";
+
+    private static final String MODIFIABLE_SHOVEL_BLOCK_CONFIG_FILE = "invasivezombies/shovel_mineable.json";
+    private static final String INTERNAL_SHOVEL_BLOCK_CONFIG_FILE = "/data/shovel_mineable.json";
 
     private static final String MODIFIABLE_SETTINGS_CONFIG_FILE = "invasivezombies/settings.json";
     private static final String INTERNAL_SETTINGS_CONFIG_FILE = "/data/settings.json"; // From JAR
@@ -43,17 +56,32 @@ public class ModConfig {
     public static final int MAX_BLOCKS = 1000;
     private static final int MAX_FILE_SIZE = 1024 * 1024;
 
-    private static List<String> mineableBlocks = new ArrayList<>();
-    private static List<String> configErrors = new ArrayList<>();
+    private static List<String> mineableBlocks = new CopyOnWriteArrayList<>();
+    private static List<String> alwaysMineableBlocks = new CopyOnWriteArrayList<>();
+    private static List<String> pickaxeMineableBlocks = new CopyOnWriteArrayList<>();
+    private static List<String> axeMineableBlocks = new CopyOnWriteArrayList<>();
+    private static List<String> shovelMineableBlocks = new CopyOnWriteArrayList<>();
+    private static List<String> configErrors = new CopyOnWriteArrayList<>();
 
     private static Path configPath; // For user's mineable.json
+    private static Path alwaysConfigPath; // For user's always_mineable.json
+    private static Path pickaxeConfigPath;
+    private static Path axeConfigPath;
+    private static Path shovelConfigPath;
     public static boolean isInitialized = false;
 
     static {
         try {
             configPath = FabricLoader.getInstance().getConfigDir().resolve(MODIFIABLE_BLOCK_CONFIG_FILE);
+            alwaysConfigPath = FabricLoader.getInstance().getConfigDir().resolve(MODIFIABLE_ALWAYS_BLOCK_CONFIG_FILE);
+            pickaxeConfigPath = FabricLoader.getInstance().getConfigDir().resolve(MODIFIABLE_PICKAXE_BLOCK_CONFIG_FILE);
+            axeConfigPath = FabricLoader.getInstance().getConfigDir().resolve(MODIFIABLE_AXE_BLOCK_CONFIG_FILE);
+            shovelConfigPath = FabricLoader.getInstance().getConfigDir().resolve(MODIFIABLE_SHOVEL_BLOCK_CONFIG_FILE);
+
             loadOrCreateSettingsConfig(); // Load settings first
             loadOrCreateBlockConfig();    // Then blocks
+            loadOrCreateAlwaysBlockConfig(); // Then always blocks
+            loadOrCreateToolBlockConfigs(); // Then tool blocks
             isInitialized = true;
         } catch(Exception e) {
             LOGGER.error("Failed to initialize config", e);
@@ -65,12 +93,26 @@ public class ModConfig {
             } else if (mineableBlocks.isEmpty()) {
                 mineableBlocks = new ArrayList<>(); // Absolute fallback
             }
+             if (alwaysMineableBlocks.isEmpty() && alwaysConfigPath != null) {
+                try { alwaysMineableBlocks = new ArrayList<>(loadDefaultAlwaysBlocks()); } catch (Exception ex) { LOGGER.error("Fallback to default always blocks failed", ex); }
+            } else if (alwaysMineableBlocks.isEmpty()) {
+                alwaysMineableBlocks = new ArrayList<>();
+            }
+            // Fallback for tools handled in their load methods or defaults
         }
     }
 
     public static List<String> getMineableBlocksInternalList() {
         return mineableBlocks;
     }
+
+    public static List<String> getAlwaysMineableBlocksInternalList() {
+        return alwaysMineableBlocks;
+    }
+
+    public static List<String> getPickaxeMineableBlocksInternalList() { return pickaxeMineableBlocks; }
+    public static List<String> getAxeMineableBlocksInternalList() { return axeMineableBlocks; }
+    public static List<String> getShovelMineableBlocksInternalList() { return shovelMineableBlocks; }
 
     public static List<String> getConfigErrorsInternalList() {
         return configErrors;
@@ -86,6 +128,12 @@ public class ModConfig {
         private boolean TargetBlockPathingParticlesEnabled = false;
         private int FarBlockSearchDistance = 12;
         private int DoorSearchDistance = 12;
+        private boolean EnableToolChance = false;
+        private boolean EnableAlwaysBreakableBlockList = false;
+        private boolean BreakBlocksWithToolsOnly = false;
+        private int PickaxeSpawnChance = 30;
+        private int AxeSpawnChance = 20;
+        private int ShovelSpawnChance = 10;
 
         public ZombieSettings() {}
 
@@ -107,6 +155,18 @@ public class ModConfig {
         public void setFarBlockSearchDistance(int FarBlockSearchDistance) { this.FarBlockSearchDistance = FarBlockSearchDistance; }
         public int getDoorSearchDistance() { return DoorSearchDistance; }
         public void setDoorSearchDistance(int DoorSearchDistance) { this.DoorSearchDistance = DoorSearchDistance; }
+        public boolean getEnableToolChance() { return EnableToolChance; }
+        public void setEnableToolChance(boolean EnableToolChance) { this.EnableToolChance = EnableToolChance; }
+        public boolean getEnableAlwaysBreakableBlockList() { return EnableAlwaysBreakableBlockList; }
+        public void setEnableAlwaysBreakableBlockList(boolean EnableAlwaysBreakableBlockList) { this.EnableAlwaysBreakableBlockList = EnableAlwaysBreakableBlockList; }
+        public boolean getBreakBlocksWithToolsOnly() { return BreakBlocksWithToolsOnly; }
+        public void setBreakBlocksWithToolsOnly(boolean BreakBlocksWithToolsOnly) { this.BreakBlocksWithToolsOnly = BreakBlocksWithToolsOnly; }
+        public int getPickaxeSpawnChance() { return PickaxeSpawnChance; }
+        public void setPickaxeSpawnChance(int PickaxeSpawnChance) { this.PickaxeSpawnChance = PickaxeSpawnChance; }
+        public int getAxeSpawnChance() { return AxeSpawnChance; }
+        public void setAxeSpawnChance(int AxeSpawnChance) { this.AxeSpawnChance = AxeSpawnChance; }
+        public int getShovelSpawnChance() { return ShovelSpawnChance; }
+        public void setShovelSpawnChance(int ShovelSpawnChance) { this.ShovelSpawnChance = ShovelSpawnChance; }
     }
 
     private static void loadOrCreateSettingsConfig() {
@@ -257,7 +317,8 @@ public class ModConfig {
             }
 
         } catch (Exception e) {
-            String error = "Failed to load or create block config (" + configPath.getFileName() + "): " + e.getMessage();
+            String fileName = (configPath != null && configPath.getFileName() != null) ? configPath.getFileName().toString() : "unknown_config_file";
+            String error = "Failed to load or create block config (" + fileName + "): " + e.getMessage();
             LOGGER.error(error, e);
             configErrors.add(error);
             // **THIS IS THE CORRECTED LINE**
@@ -495,4 +556,369 @@ public class ModConfig {
         }
         return defaults;
     }
+
+    public static Set<String> getAlwaysMineableBlocks() {
+        return new HashSet<>(alwaysMineableBlocks);
+    }
+
+    public static List<String> loadDefaultAlwaysBlocks() {
+        List<String> defaults = new ArrayList<>();
+        try (InputStream input = ModConfig.class.getResourceAsStream(INTERNAL_ALWAYS_BLOCK_CONFIG_FILE)) {
+            if (input != null) {
+                try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                    JsonObject defaultConfig = GSON.fromJson(reader, JsonObject.class);
+                    if (defaultConfig != null && defaultConfig.has("values") && defaultConfig.get("values").isJsonArray()) {
+                        JsonArray values = defaultConfig.getAsJsonArray("values");
+                        for (int i = 0; i < values.size(); i++) {
+                            if (values.get(i).isJsonObject()) {
+                                JsonObject blockObj = values.get(i).getAsJsonObject();
+                                if (blockObj.has("id") && blockObj.get("id").isJsonPrimitive() && blockObj.get("id").getAsJsonPrimitive().isString()) {
+                                    defaults.add(blockObj.get("id").getAsString());
+                                }
+                            }
+                        }
+                    }
+                } catch (JsonSyntaxException e){
+                    LOGGER.error("Failed to parse default always block config resource: " + e.getMessage(), e);
+                    configErrors.add("Failed to parse default always block config resource ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+"): " + e.getMessage());
+                }
+            } else {
+                LOGGER.warn("Default always block config resource ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+") not found.");
+                configErrors.add("Default always block config resource ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+") not found.");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load default always blocks from resources", e);
+            configErrors.add("Failed to load default always blocks ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+"): " + e.getMessage());
+        }
+        return defaults;
+    }
+
+    private static void loadOrCreateAlwaysBlockConfig() {
+        try {
+            Path dir = alwaysConfigPath.getParent();
+            if (dir != null && !Files.exists(dir)) {
+                Files.createDirectories(dir);
+            }
+            if (dir != null && !Files.isWritable(dir)) {
+                throw new IOException("Config directory is not writable: " + dir);
+            }
+
+            if (!Files.exists(alwaysConfigPath)) {
+                createDefaultAlwaysBlockListFile();
+            } else {
+                if (!Files.isReadable(alwaysConfigPath)) {
+                    throw new IOException("Config file is not readable: " + alwaysConfigPath);
+                }
+                if (Files.size(alwaysConfigPath) > MAX_FILE_SIZE) {
+                    throw new IOException("Config file " + alwaysConfigPath.getFileName() + " exceeds maximum size limit of 1MB");
+                }
+                loadAlwaysBlockConfigFromFile();
+            }
+
+            if (alwaysMineableBlocks.size() > MAX_BLOCKS) {
+                String error = "Too many blocks in always config (limit: " + MAX_BLOCKS + ")";
+                configErrors.add(error);
+                LOGGER.warn(error);
+                alwaysMineableBlocks = alwaysMineableBlocks.subList(0, MAX_BLOCKS);
+            }
+
+            Set<String> uniqueBlocks = new HashSet<>(alwaysMineableBlocks);
+            if (uniqueBlocks.size() < alwaysMineableBlocks.size()) {
+                List<String> duplicates = alwaysMineableBlocks.stream()
+                        .filter(block -> Collections.frequency(alwaysMineableBlocks, block) > 1)
+                        .distinct()
+                        .collect(Collectors.toList());
+                String error = "Duplicate blocks found and removed from always list: " + String.join(", ", duplicates);
+                configErrors.add(error);
+                LOGGER.warn(error);
+                alwaysMineableBlocks = new ArrayList<>(uniqueBlocks);
+            }
+
+        } catch (Exception e) {
+            String error = "Failed to load or create always block config (" + alwaysConfigPath.getFileName() + "): " + e.getMessage();
+            LOGGER.error(error, e);
+            configErrors.add(error);
+            alwaysMineableBlocks = new ArrayList<>(loadDefaultAlwaysBlocks());
+        }
+    }
+
+    private static void createDefaultAlwaysBlockListFile() throws IOException {
+        alwaysMineableBlocks.clear();
+        JsonObject defaultConfigJsonOutput = new JsonObject();
+        JsonArray defaultValuesArray = new JsonArray();
+
+        try (InputStream input = ModConfig.class.getResourceAsStream(INTERNAL_ALWAYS_BLOCK_CONFIG_FILE)) {
+            if (input != null) {
+                try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                    JsonObject parsedDefaults = GSON.fromJson(reader, JsonObject.class);
+                    if (parsedDefaults != null && parsedDefaults.has("values") && parsedDefaults.get("values").isJsonArray()) {
+                        JsonArray valuesFromJar = parsedDefaults.getAsJsonArray("values");
+                        for (int i = 0; i < valuesFromJar.size(); i++) {
+                            if (valuesFromJar.get(i).isJsonObject()) {
+                                JsonObject blockObj = valuesFromJar.get(i).getAsJsonObject();
+                                if (blockObj.has("id") && blockObj.get("id").isJsonPrimitive() && blockObj.get("id").getAsJsonPrimitive().isString()) {
+                                    String id = blockObj.get("id").getAsString();
+                                    alwaysMineableBlocks.add(id);
+                                    defaultValuesArray.add(blockObj);
+                                }
+                            }
+                        }
+                    } else {
+                        configErrors.add("Default always block config resource ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+") is malformed. Using empty list.");
+                    }
+                } catch (JsonSyntaxException e) {
+                    configErrors.add("Default always block config resource ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+") is malformed: " + e.getMessage() + ". Using empty list.");
+                }
+            } else {
+                configErrors.add("Default always block config resource ("+INTERNAL_ALWAYS_BLOCK_CONFIG_FILE+") not found - using empty config");
+            }
+        }
+        defaultConfigJsonOutput.add("values", defaultValuesArray);
+
+        if (Files.exists(alwaysConfigPath)) {
+            Path backupPath = alwaysConfigPath.resolveSibling(alwaysConfigPath.getFileName() + ".backup");
+            Files.copy(alwaysConfigPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+        }
+        Files.writeString(alwaysConfigPath, GSON.toJson(defaultConfigJsonOutput), StandardCharsets.UTF_8);
+    }
+
+    private static void loadAlwaysBlockConfigFromFile() throws IOException {
+        String content = Files.readString(alwaysConfigPath, StandardCharsets.UTF_8);
+        JsonObject configJson;
+        try {
+            configJson = GSON.fromJson(content, JsonObject.class);
+        } catch (JsonSyntaxException e) {
+            throw new IOException("Malformed JSON in always block config file: " + e.getMessage(), e);
+        }
+
+        alwaysMineableBlocks.clear();
+
+        if (configJson == null) {
+            throw new IOException("Always block config file " + alwaysConfigPath.getFileName() + " is empty or corrupted");
+        }
+        if (!configJson.has("values")) {
+            throw new IOException("Invalid always block config format in " + alwaysConfigPath.getFileName() + " - missing 'values' array");
+        }
+        JsonArray values;
+        try {
+            values = configJson.getAsJsonArray("values");
+        } catch (ClassCastException e) {
+            throw new IOException("'values' is not an array in always block config");
+        }
+
+        for (int i = 0; i < values.size(); i++) {
+            try {
+                if(!values.get(i).isJsonObject()){
+                    configErrors.add("Block entry at index " + i + " in " + alwaysConfigPath.getFileName() + " is not an object.");
+                    continue;
+                }
+                JsonObject blockObj = values.get(i).getAsJsonObject();
+                if (!blockObj.has("id") || !blockObj.get("id").isJsonPrimitive() || !blockObj.get("id").getAsJsonPrimitive().isString()) {
+                    configErrors.add("Block at index " + i + " in " + alwaysConfigPath.getFileName() + " is missing 'id' field.");
+                    continue;
+                }
+                String id = blockObj.get("id").getAsString();
+
+                if (id.startsWith("#")) {
+                    alwaysMineableBlocks.add(id);
+                } else {
+                    try {
+                        Identifier identifier = VersionHelper.CustomIdentifier(id);
+                        if (BuiltInRegistries.BLOCK.containsKey(identifier)) {
+                            alwaysMineableBlocks.add(id);
+                        } else {
+                            configErrors.add("Block does not exist in game registry (during load of " + alwaysConfigPath.getFileName() + "): " + id);
+                        }
+                    } catch (IdentifierException e) {
+                        configErrors.add("Invalid block ID format at index " + i + " (during load of " + alwaysConfigPath.getFileName() + "): " + id);
+                    }
+                }
+            } catch (Exception e) {
+                configErrors.add("Error parsing block at index " + i + " in " + alwaysConfigPath.getFileName() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    public static void saveAlwaysBlockConfig() {
+        if (!isInitialized) {
+            LOGGER.error("Attempted to save always block config before initialization");
+            return;
+        }
+        List<String> tempSaveErrors = new ArrayList<>();
+        try {
+            Path parentDir = alwaysConfigPath.getParent();
+            if (parentDir != null && !Files.isWritable(parentDir)) {
+                throw new IOException("Config directory is not writable for " + alwaysConfigPath.getFileName());
+            }
+
+            if (Files.exists(alwaysConfigPath)) {
+                Path backupPath = alwaysConfigPath.resolveSibling(alwaysConfigPath.getFileName() + ".backup");
+                Files.copy(alwaysConfigPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            JsonObject configOut = new JsonObject();
+            JsonArray valuesOut = new JsonArray();
+            List<String> blocksToActuallySave = new ArrayList<>();
+            Set<String> seenInSave = new HashSet<>();
+
+            for (String block : alwaysMineableBlocks) {
+                if (blocksToActuallySave.size() >= MAX_BLOCKS) {
+                    tempSaveErrors.add("Max block limit ("+MAX_BLOCKS+") reached during save of always blocks.");
+                    break;
+                }
+                String validationError = validateBlockId(block);
+                if (validationError == null) {
+                    if (seenInSave.add(block)) {
+                        blocksToActuallySave.add(block);
+                    } else {
+                        tempSaveErrors.add("Skipping duplicate block during save (always): " + block);
+                    }
+                } else {
+                    String error = "Skipping invalid block ID during save (always): " + block + " (" + validationError + ")";
+                    LOGGER.warn(error);
+                    tempSaveErrors.add(error);
+                }
+            }
+
+            for(String blockIdToSave : blocksToActuallySave) {
+                JsonObject blockObj = new JsonObject();
+                blockObj.addProperty("id", blockIdToSave);
+                valuesOut.add(blockObj);
+            }
+
+            configOut.add("values", valuesOut);
+            String jsonString = GSON.toJson(configOut);
+
+            if (jsonString.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_SIZE) {
+                throw new IOException("Config file " + alwaysConfigPath.getFileName() + " would exceed maximum size limit of 1MB");
+            }
+
+            Path tempFile = alwaysConfigPath.resolveSibling(alwaysConfigPath.getFileName() + ".tmp");
+            Files.writeString(tempFile, jsonString, StandardCharsets.UTF_8);
+            Files.move(tempFile, alwaysConfigPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+
+            if (!tempSaveErrors.isEmpty()) {
+                LOGGER.warn("Some issues occurred during always block config save: " + String.join("; ", tempSaveErrors));
+                configErrors.addAll(tempSaveErrors);
+            }
+
+        } catch (IOException e) {
+            String error = "Failed to save always block config (" + alwaysConfigPath.getFileName() + "): " + e.getMessage();
+            LOGGER.error(error, e);
+            configErrors.add(error);
+        }
+    }
+
+    public static Set<String> getPickaxeMineableBlocks() { return new HashSet<>(pickaxeMineableBlocks); }
+    public static Set<String> getAxeMineableBlocks() { return new HashSet<>(axeMineableBlocks); }
+    public static Set<String> getShovelMineableBlocks() { return new HashSet<>(shovelMineableBlocks); }
+
+    private static void loadOrCreateToolBlockConfigs() {
+        loadOrCreateSpecificToolConfig(pickaxeConfigPath, pickaxeMineableBlocks, INTERNAL_PICKAXE_BLOCK_CONFIG_FILE);
+        loadOrCreateSpecificToolConfig(axeConfigPath, axeMineableBlocks, INTERNAL_AXE_BLOCK_CONFIG_FILE);
+        loadOrCreateSpecificToolConfig(shovelConfigPath, shovelMineableBlocks, INTERNAL_SHOVEL_BLOCK_CONFIG_FILE);
+    }
+
+    private static void loadOrCreateSpecificToolConfig(Path path, List<String> targetList, String internalResource) {
+        try {
+            Path dir = path.getParent();
+            if (dir != null && !Files.exists(dir)) {
+                Files.createDirectories(dir);
+            }
+            if (!Files.exists(path)) {
+                createDefaultToolConfig(path, targetList, internalResource);
+            } else {
+                loadToolConfigFromFile(path, targetList);
+            }
+            // Dedup
+            Set<String> unique = new HashSet<>(targetList);
+            if(unique.size() < targetList.size()) {
+                targetList.clear();
+                targetList.addAll(unique);
+            }
+        } catch (Exception e) {
+            String error = "Failed to load/create tool config " + path.getFileName() + ": " + e.getMessage();
+            LOGGER.error(error, e);
+            configErrors.add(error);
+            // Load defaults
+            targetList.clear();
+            targetList.addAll(loadDefaultToolBlocks(internalResource));
+        }
+    }
+
+    public static List<String> loadDefaultToolBlocks(String internalResource) {
+        List<String> defaults = new ArrayList<>();
+        try (InputStream input = ModConfig.class.getResourceAsStream(internalResource)) {
+            if (input != null) {
+                try (InputStreamReader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                    JsonObject defaultConfig = GSON.fromJson(reader, JsonObject.class);
+                    if (defaultConfig != null && defaultConfig.has("values")) {
+                        JsonArray values = defaultConfig.getAsJsonArray("values");
+                        for (int i = 0; i < values.size(); i++) {
+                            if (values.get(i).isJsonObject()) {
+                                JsonObject blockObj = values.get(i).getAsJsonObject();
+                                if (blockObj.has("id")) {
+                                    defaults.add(blockObj.get("id").getAsString());
+                                }
+                            }
+                        }
+                    }
+                } catch(Exception e) {}
+            }
+        } catch (Exception e) {}
+        return defaults;
+    }
+
+    private static void createDefaultToolConfig(Path path, List<String> targetList, String internalResource) throws IOException {
+        targetList.clear();
+        targetList.addAll(loadDefaultToolBlocks(internalResource));
+        saveToolConfig(path, targetList);
+    }
+
+    private static void loadToolConfigFromFile(Path path, List<String> targetList) throws IOException {
+        String content = Files.readString(path, StandardCharsets.UTF_8);
+        JsonObject configJson = GSON.fromJson(content, JsonObject.class);
+        targetList.clear();
+        if (configJson != null && configJson.has("values")) {
+            JsonArray values = configJson.getAsJsonArray("values");
+            for (int i = 0; i < values.size(); i++) {
+                try {
+                    JsonObject blockObj = values.get(i).getAsJsonObject();
+                    if (blockObj.has("id")) {
+                        String id = blockObj.get("id").getAsString();
+                        // Basic validation
+                        if(validateBlockId(id) == null) {
+                            targetList.add(id);
+                        } else {
+                            configErrors.add("Invalid ID in " + path.getFileName() + ": " + id);
+                        }
+                    }
+                } catch(Exception e) {
+                    configErrors.add("Error parsing entry in " + path.getFileName());
+                }
+            }
+        }
+    }
+
+    public static void saveToolConfig(Path path, List<String> targetList) {
+        try {
+            JsonObject configOut = new JsonObject();
+            JsonArray valuesOut = new JsonArray();
+            for(String s : targetList) {
+                JsonObject o = new JsonObject();
+                o.addProperty("id", s);
+                valuesOut.add(o);
+            }
+            configOut.add("values", valuesOut);
+            String jsonString = GSON.toJson(configOut);
+            Files.writeString(path, jsonString, StandardCharsets.UTF_8);
+        } catch(Exception e) {
+            LOGGER.error("Failed to save " + path.getFileName(), e);
+            configErrors.add("Failed to save " + path.getFileName() + ": " + e.getMessage());
+        }
+    }
+
+    public static void savePickaxeConfig() { saveToolConfig(pickaxeConfigPath, pickaxeMineableBlocks); }
+    public static void saveAxeConfig() { saveToolConfig(axeConfigPath, axeMineableBlocks); }
+    public static void saveShovelConfig() { saveToolConfig(shovelConfigPath, shovelMineableBlocks); }
 }
