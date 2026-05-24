@@ -8,6 +8,7 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 
 public class KeepTargetGoal extends Goal {
 
@@ -30,7 +31,10 @@ public class KeepTargetGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (zombie == null || zombie.level() == null) return false;
+
+        if (zombie == null || !zombie.isAlive() || zombie.level() == null) {
+            return false;
+        }
 
 
         validateCurrentTarget();
@@ -41,6 +45,9 @@ public class KeepTargetGoal extends Goal {
             targetSeen = false;
             previousTarget = currentTarget;
         }
+
+        Level level = zombie.level();
+        if (level == null) return false;
 
         // For visibility tracking (used for extended follow range)
         // Check if we can see any player at all within max follow range
@@ -110,6 +117,9 @@ public class KeepTargetGoal extends Goal {
     }
 
     private Player findNearestValidPlayer(double range) {
+
+        if (zombie == null || zombie.level() == null) return null;
+
         Player nearestPlayer = null;
         double closestDistance = Double.MAX_VALUE;
         double rangeSquared = range * range;
@@ -132,6 +142,10 @@ public class KeepTargetGoal extends Goal {
     }
 
     private Villager findNearestValidVillager(double range) {
+
+        if (zombie == null || zombie.level() == null) return null;
+
+
         Villager nearestVillager = null;
         double closestDistance = Double.MAX_VALUE;
         double rangeSquared = range * range;

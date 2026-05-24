@@ -127,6 +127,13 @@ public class BlockBreakGoal extends Goal {
 
     @Override
     public boolean canUse() {
+
+        //  Very First NULL check!
+        if (zombie == null || zombie.getTarget() == null) {
+            return false;
+        }
+
+
         if (settings.getBreakBlocksWithToolsOnly()) {
             ItemStack mainHand = zombie.getMainHandItem();
             boolean hasTool = mainHand.is(ItemTags.PICKAXES) ||
@@ -140,9 +147,7 @@ public class BlockBreakGoal extends Goal {
             prevfailedBlockFindings = failedBlockFindings;
         }
 
-        if (zombie == null || zombie.getTarget() == null) {
-            return false; // Prevent null dereference
-        }
+
 
         if (zombie.isBaby() && !settings.getBabyZombiesEnabled()) {
             return false;
@@ -275,6 +280,12 @@ public class BlockBreakGoal extends Goal {
         Direction facing = zombie.getDirection();
 
         if (!(world instanceof ServerLevel) || target == null || zombiePos == null || target.position() == null || facing == null) {
+            return null;
+        }
+
+        // SAFETY: Check target position before accessing
+        Vec3 targetPos = target.position();
+        if (targetPos == null) {
             return null;
         }
 
