@@ -20,3 +20,37 @@ mOgUt4GM
 
 - Compiled with Java 21, fixes incompatibility
 - Update Gradle-Wrapper and Loom
+
+
+1.0.8
+
+- Compiled with Java 21, fixes incompatibility
+- Update Gradle-Wrapper and Loom
+
+
+2.0.0 BETA
+✨ New Features
+
+Added a toggleable system that requires zombies to use the correct tool to break specific blocks.
+
+Added a configuration option to automatically equip zombies with tools.
+
+⚙️ Configuration Changes
+
+Added separate configurable block lists for:
+
+🪓 Axe-breakable blocks
+
+⛏️ Pickaxe-breakable blocks
+
+🪣 Shovel-breakable blocks
+
+Added an "Always Mineable" block list — blocks in this list can be broken regardless of the tool used.
+
+
+
+2.0.1
+
+Switched to official Mojang mappings
+
+Compiled with Java25
