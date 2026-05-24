@@ -33,9 +33,9 @@ public abstract class ZombieEntityMixin {
         //  BlockBreakGoal & KeepTargetGoal EXCLUSIONS:
 
         if (zombie instanceof ZombifiedPiglin
-                || zombie instanceof ZombieHorse
                 || zombie instanceof Drowned
-                || zombie instanceof Husk) {
+                || zombie instanceof Husk
+                || ((Object) zombie) instanceof ZombieHorse) {
             return;
         }
 
